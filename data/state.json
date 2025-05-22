@@ -1,0 +1,5 @@
+{
+  "mode": "simulation",
+  "trade_amount_usd": 0.01,
+  "max_trades_per_minute": 60
+}

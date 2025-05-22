@@ -1,5 +1,3 @@
-# run_worker.py
-
 import time
 import os
 import json
