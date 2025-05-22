@@ -3,7 +3,7 @@ import os
 import json
 import csv
 from datetime import datetime
-from config.settings import load_settings
+from config.settings import SETTINGS as settings
 from core.trade_executor import simulate_trade
 
 STATE_FILE = "data/state.json"
@@ -53,7 +53,6 @@ if __name__ == "__main__":
 
     os.makedirs("data", exist_ok=True)
 
-    settings = load_settings()
     state = load_state()
 
     while True:
