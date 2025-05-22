@@ -12,8 +12,14 @@ MEMORY_FILE = "data/memory.csv"
 def load_state():
     if not os.path.exists(STATE_FILE):
         return {"count": 0}
-    with open(STATE_FILE, "r") as f:
-        return json.load(f)
+    try:
+        with open(STATE_FILE, "r") as f:
+            state = json.load(f)
+            if "count" not in state:
+                state["count"] = 0
+            return state
+    except Exception:
+        return {"count": 0}
 
 def save_state(state):
     os.makedirs("data", exist_ok=True)
