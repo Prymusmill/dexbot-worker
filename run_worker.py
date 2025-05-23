@@ -74,7 +74,7 @@ if __name__ == "__main__":
 
     while True:
         for _ in range(30):  # ✅ poprawne wcięcie
-            print(f"🔁 Symulacja {state['count'] + 1}", flush=True)
+            print(f"✅ Symulacja: {row}", flush=True)
             simulate_trade(settings)
             state["count"] += 1
             time.sleep(0.25)
