@@ -9,9 +9,13 @@ from core.trade_executor import simulate_trade
 
 STATE_FILE = "data/state.json"
 MEMORY_FILE = "data/memory.csv"
+EXPORT_DIR = "data/results"
+
 
 def load_state():
+    os.makedirs("data", exist_ok=True)
     if not os.path.exists(STATE_FILE):
+        print("🔧 Tworzę nowy plik state.json z count = 0")
         return {"count": 0}
     try:
         with open(STATE_FILE, "r") as f:
@@ -19,32 +23,33 @@ def load_state():
             if "count" not in state:
                 state["count"] = 0
             return state
-    except Exception:
+    except Exception as e:
+        print(f"⚠️ Błąd wczytywania state.json: {e}")
         return {"count": 0}
 
+
 def save_state(state):
-    os.makedirs("data", exist_ok=True)
     with open(STATE_FILE, "w") as f:
         json.dump(state, f)
+    print(f"💾 Zapisano stan: count = {state['count']}")
+
 
 def export_results():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-    export_dir = "data/results"
-    export_path = f"{export_dir}/results_{timestamp}.csv"
+    export_path = f"{EXPORT_DIR}/results_{timestamp}.csv"
 
     if not os.path.exists(MEMORY_FILE):
         print("⚠️ Brak pliku memory.csv — eksport pominięty")
-        return
+        return None
 
-    os.makedirs(export_dir, exist_ok=True)
+    os.makedirs(EXPORT_DIR, exist_ok=True)
 
     with open(MEMORY_FILE, "r") as src:
         rows = list(csv.reader(src))
         if not rows:
-            print("⚠️ Plik memory.csv jest pusty — eksport pominięty")
-            return
-        header = rows[0]
-        data_rows = rows[1:]
+            print("⚠️ Plik memory.csv jest pusty")
+            return None
+        header, data_rows = rows[0], rows[1:]
         last_100 = data_rows[-100:]
 
     with open(export_path, "w", newline="") as dst:
@@ -52,8 +57,9 @@ def export_results():
         writer.writerow(header)
         writer.writerows(last_100)
 
-    print(f"✅ Wyeksportowano ostatnie 100 wierszy do: {export_path}")
-    return export_path  # 🧠 zwracamy ścieżkę do pliku
+    print(f"✅ Wyeksportowano 100 wpisów do: {export_path}")
+    return export_path
+
 
 def commit_and_push(file_path):
     try:
@@ -62,18 +68,18 @@ def commit_and_push(file_path):
         subprocess.run(["git", "add", file_path], check=True)
         subprocess.run(["git", "commit", "-m", "Auto export results"], check=True)
         subprocess.run(["git", "push", "origin", "main"], check=True)
-        print("🚀 Plik wypchnięty do GitHuba.")
+        print("🚀 Wyniki wypchnięte do GitHuba")
     except subprocess.CalledProcessError as e:
-        print(f"❌ Błąd podczas pushowania: {e}")
+        print(f"❌ Błąd pushowania: {e}")
+
 
 if __name__ == "__main__":
     print("🚀 Uruchamiam bota DEX w trybie ciągłym...")
 
-    os.makedirs("data", exist_ok=True)
     state = load_state()
 
     while True:
-        for i in range(30):  # 🔁 Paczka 5 symulacji
+        for _ in range(30):
             print(f"🔁 Symulacja {state['count'] + 1}")
             simulate_trade(settings)
             state["count"] += 1
@@ -82,9 +88,9 @@ if __name__ == "__main__":
         save_state(state)
 
         if state["count"] % 100 == 0:
-            exported_file = export_results()
-            if exported_file:
-                commit_and_push(exported_file)
+            file_path = export_results()
+            if file_path:
+                commit_and_push(file_path)
 
-        print("⏳ Oczekiwanie 60 sekund przed kolejną paczką...")
+        print("⏳ Oczekiwanie 60 sekund...")
         time.sleep(60)
