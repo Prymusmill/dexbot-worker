@@ -1,28 +1,32 @@
+# core/trade_executor.py
+
 import csv
-import os
-import random
 from datetime import datetime
+import random
+import os
 
 MEMORY_FILE = "data/memory.csv"
 
 def simulate_trade(settings):
-    os.makedirs("data", exist_ok=True)
-
-    # Przykładowe dane transakcji
-    timestamp = datetime.now().isoformat()
+    timestamp = datetime.utcnow().isoformat()
     input_token = "SOL"
     output_token = "USDC"
-    trade_amount = float(settings.get("trade_amount_usd", 0.01))
-    output_received = round(trade_amount * random.uniform(0.98, 1.02), 5)  # symulacja z niewielką zmiennością
-    success = random.choice([True] * 9 + [False])  # 90% szans powodzenia
+    amount_in = settings["trade_amount_usd"]
 
-    row = [timestamp, input_token, output_token, trade_amount, output_received, success]
+    # Losowe dane wyjściowe
+    price_impact = round(random.uniform(-0.01, 0.01), 5)
+    amount_out = round(amount_in * (1 + price_impact), 5)
+    profitable = amount_out > amount_in
 
-    write_header = not os.path.exists(MEMORY_FILE)
-    with open(MEMORY_FILE, mode="a", newline="") as file:
-        writer = csv.writer(file)
-        if write_header:
-            writer.writerow(["timestamp", "input_token", "output_token", "trade_amount_usd", "output_received", "success"])
+    row = [timestamp, input_token, output_token, amount_in, amount_out, price_impact]
+
+    # Zapis do memory.csv
+    os.makedirs("data", exist_ok=True)
+    file_exists = os.path.isfile(MEMORY_FILE)
+    with open(MEMORY_FILE, "a", newline="") as f:
+        writer = csv.writer(f)
+        if not file_exists or os.stat(MEMORY_FILE).st_size == 0:
+            writer.writerow(["timestamp", "input_token", "output_token", "amount_in", "amount_out", "price_impact"])
         writer.writerow(row)
 
     print(f"✅ Symulacja: {row}")
