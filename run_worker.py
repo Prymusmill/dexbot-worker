@@ -73,11 +73,11 @@ if __name__ == "__main__":
     state = load_state()
 
     while True:
-        for i in range(15):  # 🔁 Paczka 5 symulacji
+        for i in range(30):  # 🔁 Paczka 5 symulacji
             print(f"🔁 Symulacja {state['count'] + 1}")
             simulate_trade(settings)
             state["count"] += 1
-            time.sleep(0.5)
+            time.sleep(0.25)
 
         save_state(state)
 
