@@ -34,7 +34,7 @@ def export_results():
 
     if not os.path.exists(MEMORY_FILE):
         print("⚠️ Brak pliku memory.csv — eksport pominięty")
-        return None
+        return
 
     os.makedirs(export_dir, exist_ok=True)
 
@@ -42,7 +42,7 @@ def export_results():
         rows = list(csv.reader(src))
         if not rows:
             print("⚠️ Plik memory.csv jest pusty — eksport pominięty")
-            return None
+            return
         header = rows[0]
         data_rows = rows[1:]
         last_100 = data_rows[-100:]
@@ -73,11 +73,11 @@ if __name__ == "__main__":
     state = load_state()
 
     while True:
-        for _ in range(30):  # ✅ poprawne wcięcie
-            print(f"✅ Symulacja: {row}", flush=True)
+        for _ in range(30):
+            print(f"🔁 Symulacja {state['count'] + 1}", flush=True)
             simulate_trade(settings)
             state["count"] += 1
-            time.sleep(0.25)
+            time.sleep(0.3)
 
         save_state(state)
 
