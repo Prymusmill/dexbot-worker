@@ -2,7 +2,6 @@ import time
 import os
 import json
 import csv
-import subprocess
 from datetime import datetime
 from config.settings import SETTINGS as settings
 from core.trade_executor import simulate_trade
@@ -59,17 +58,6 @@ def export_results():
         print(f"❌ Błąd eksportu danych: {e}", flush=True)
         return None
 
-def commit_and_push(file_path):
-    try:
-        subprocess.run(["git", "config", "--global", "user.name", "dexbot"], check=True)
-        subprocess.run(["git", "config", "--global", "user.email", "bot@dex.ai"], check=True)
-        subprocess.run(["git", "add", file_path], check=True)
-        subprocess.run(["git", "commit", "-m", "Auto export results"], check=True)
-        subprocess.run(["git", "push", "origin", "main"], check=True)
-        print("🚀 Plik wypchnięty do GitHuba.", flush=True)
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Błąd podczas pushowania: {e}", flush=True)
-
 if __name__ == "__main__":
     print("🚀 Uruchamiam bota DEX w trybie ciągłym...", flush=True)
 
@@ -77,11 +65,10 @@ if __name__ == "__main__":
     state = load_state()
 
     while True:
-        for _ in range(30):  # 🔁 Paczka 30 symulacji
+        for _ in range(30):
             print(f"🔁 Symulacja {state['count'] + 1}", flush=True)
             simulate_trade(settings)
 
-            # DEBUG: czy plik istnieje i ma dane
             if os.path.exists(MEMORY_FILE):
                 size = os.stat(MEMORY_FILE).st_size
                 print(f"📁 memory.csv istnieje – rozmiar: {size} bajtów", flush=True)
@@ -94,7 +81,7 @@ if __name__ == "__main__":
         save_state(state)
 
         if state["count"] % 100 == 0:
-            export_results()  # już bez commitowania
+            export_results()
 
         print("⏳ Oczekiwanie 60 sekund przed kolejną paczką...", flush=True)
         time.sleep(60)
