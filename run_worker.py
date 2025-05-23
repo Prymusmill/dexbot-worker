@@ -94,9 +94,7 @@ if __name__ == "__main__":
         save_state(state)
 
         if state["count"] % 100 == 0:
-            exported_file = export_results()
-            if exported_file:
-                commit_and_push(exported_file)
+            export_results()  # już bez commitowania
 
         print("⏳ Oczekiwanie 60 sekund przed kolejną paczką...", flush=True)
         time.sleep(60)
