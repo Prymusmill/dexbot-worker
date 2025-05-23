@@ -2,6 +2,7 @@ import time
 import os
 import json
 import csv
+import subprocess
 from datetime import datetime
 from config.settings import SETTINGS as settings
 from core.trade_executor import simulate_trade
@@ -44,8 +45,7 @@ def export_results():
             return
         header = rows[0]
         data_rows = rows[1:]
-
-    last_100 = data_rows[-100:]
+        last_100 = data_rows[-100:]
 
     with open(export_path, "w", newline="") as dst:
         writer = csv.writer(dst)
@@ -53,16 +53,27 @@ def export_results():
         writer.writerows(last_100)
 
     print(f"✅ Wyeksportowano ostatnie 100 wierszy do: {export_path}")
+    return export_path  # 🧠 zwracamy ścieżkę do pliku
+
+def commit_and_push(file_path):
+    try:
+        subprocess.run(["git", "config", "--global", "user.name", "dexbot"], check=True)
+        subprocess.run(["git", "config", "--global", "user.email", "bot@dex.ai"], check=True)
+        subprocess.run(["git", "add", file_path], check=True)
+        subprocess.run(["git", "commit", "-m", "Auto export results"], check=True)
+        subprocess.run(["git", "push", "origin", "main"], check=True)
+        print("🚀 Plik wypchnięty do GitHuba.")
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Błąd podczas pushowania: {e}")
 
 if __name__ == "__main__":
     print("🚀 Uruchamiam bota DEX w trybie ciągłym...")
 
     os.makedirs("data", exist_ok=True)
-
     state = load_state()
 
     while True:
-        for i in range(5):  # 🔁 wykonaj paczkę 5 symulacji
+        for i in range(5):  # 🔁 Paczka 5 symulacji
             print(f"🔁 Symulacja {state['count'] + 1}")
             simulate_trade(settings)
             state["count"] += 1
@@ -70,8 +81,10 @@ if __name__ == "__main__":
 
         save_state(state)
 
-        if state["count"] % 200 == 0:
-            export_results()
+        if state["count"] % 100 == 0:
+            exported_file = export_results()
+            if exported_file:
+                commit_and_push(exported_file)
 
         print("⏳ Oczekiwanie 60 sekund przed kolejną paczką...")
         time.sleep(60)
