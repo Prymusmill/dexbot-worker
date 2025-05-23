@@ -79,18 +79,23 @@ if __name__ == "__main__":
     state = load_state()
 
     while True:
-        for _ in range(30):
-            print(f"🔁 Symulacja {state['count'] + 1}")
-            simulate_trade(settings)
-            state["count"] += 1
-            time.sleep(0.25)
+    for _ in range(30):
+        print(f"🔁 Symulacja {state['count'] + 1}", flush=True)
+        simulate_trade(settings)
+        state["count"] += 1
+        time.sleep(0.25)
 
-        save_state(state)
+    save_state(state)
 
-        if state["count"] % 100 == 0:
-            file_path = export_results()
-            if file_path:
-                commit_and_push(file_path)
+    if state["count"] % 100 == 0:
+        exported_file = export_results()
+        if exported_file:
+            commit_and_push(exported_file)
 
-        print("⏳ Oczekiwanie 60 sekund...")
-        time.sleep(60)
+    print("⏳ Oczekiwanie 60 sekund przed kolejną paczką...", flush=True)
+    time.sleep(60)
+
+    with open(MEMORY_FILE, "w", newline="") as dst:
+        writer = csv.writer(dst)
+        writer.writerow(header)
+        writer.writerows(last_100)
