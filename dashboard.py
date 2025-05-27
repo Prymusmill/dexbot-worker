@@ -85,34 +85,32 @@ def calculate_metrics(df):
     }
 
 def main():
-    # Header
-    st.title("🚀 DexBot Trading Dashboard")
-    st.markdown("---")
-    
-    # Auto-refresh w sidebar (bez sleep!)
-    auto_refresh = st.sidebar.checkbox("🔄 Auto-refresh (60s)", value=True)
-    
-    if auto_refresh:
-        # Prostszy countdown bez blokowania
-        if 'refresh_time' not in st.session_state:
-            st.session_state.refresh_time = time.time() + 60
-        
-        remaining = int(st.session_state.refresh_time - time.time())
-        
-        if remaining <= 0:
-            st.session_state.refresh_time = time.time() + 60
-            st.cache_data.clear()  # Clear cache
-            st.rerun()
-        else:
-            st.sidebar.write(f"⏱️ Refresh za: {remaining}s") 
-
-    # Header
-    st.title("🚀 DexBot Trading Dashboard")
-    st.markdown("---")
-    
-    # Sidebar
-    with st.sidebar:
-        st.header("⚙️ Kontrola")
+   # Header
+   st.title("🚀 DexBot Trading Dashboard")
+   st.markdown("---")
+   
+   # Auto-refresh w sidebar - lepsze rozwiązanie
+   auto_refresh = st.sidebar.checkbox("🔄 Auto-refresh (60s)", value=True)
+   
+   if auto_refresh:
+       # Refresh co 5 sekund dla smooth countdown
+       if 'refresh_counter' not in st.session_state:
+           st.session_state.refresh_counter = 60
+       
+       st.sidebar.write(f"⏱️ Refresh za: {st.session_state.refresh_counter}s")
+       
+       if st.session_state.refresh_counter <= 0:
+           st.session_state.refresh_counter = 60
+           st.cache_data.clear()
+           st.rerun()
+       else:
+           st.session_state.refresh_counter -= 5
+           time.sleep(5)
+           st.rerun()
+   
+   # Sidebar
+   with st.sidebar:
+       st.header("⚙️ Kontrola")
         
         # Status
         st.subheader("Status Systemu")
