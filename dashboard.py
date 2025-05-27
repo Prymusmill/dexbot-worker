@@ -47,15 +47,15 @@ def load_trading_data():
         df['date'] = df['timestamp'].dt.date
         df['hour'] = df['timestamp'].dt.hour
         
-        return df
+    return df
     except Exception as e:
         st.error(f"❌ Błąd wczytywania danych: {e}")
-        return pd.DataFrame()
+    return pd.DataFrame()
 
 def calculate_metrics(df):
     """Oblicz kluczowe metryki"""
-    if df.empty:
-        return {}
+if df.empty:
+    return {}
     
     total_trades = len(df)
     winning_trades = len(df[df['profitable']])
@@ -114,7 +114,7 @@ def main():
         # Status
         st.subheader("Status Systemu")
         st.success("🟢 Bot Aktywny")
-        st.info("📊 Tryb: Symulacja")
+    st.info("📊 Tryb: Symulacja")
         
         # Refresh button
         if st.button("🔄 Odśwież Dane"):
@@ -129,17 +129,17 @@ def main():
     # Wczytaj dane
 df = load_trading_data()
     
-    if df.empty:
-        st.warning("⚠️ Brak danych do wyświetlenia")
-        st.info("Worker może jeszcze nie zapisał danych lub wystąpił problem z plikiem.")
-        return
+if df.empty:
+    st.warning("⚠️ Brak danych do wyświetlenia")
+    st.info("Worker może jeszcze nie zapisał danych lub wystąpił problem z plikiem.")
+    return
     
     # Oblicz metryki
     metrics = calculate_metrics(df)
     
     if not metrics:
-        st.warning("⚠️ Nie można obliczyć metryk")
-        return
+    st.warning("⚠️ Nie można obliczyć metryk")
+    return
     
     # Główne metryki
     st.header("📊 Kluczowe Metryki")
