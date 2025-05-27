@@ -1,4 +1,4 @@
-# dashboard.py
+# dashboard_simple.py - Prostszy dashboard bez problematycznych wykresów
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -6,18 +6,13 @@ import plotly.express as px
 from datetime import datetime, timedelta
 import os
 import numpy as np
-#from streamlit_autorefresh import st_autorefresh)
 
 # Konfiguracja strony
 st.set_page_config(
     page_title="DexBot Trading Dashboard",
     page_icon="🚀",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
-
-# Auto-refresh co 30 sekund (opcjonalnie)
-#st_autorefresh(interval=30000, key="datarefresh")
 
 @st.cache_data
 def load_trading_data():
@@ -28,6 +23,10 @@ def load_trading_data():
             return pd.DataFrame()
         
         df = pd.read_csv("data/memory.csv")
+        
+        if len(df) == 0:
+            st.warning("⚠️ Plik memory.csv jest pusty")
+            return pd.DataFrame()
         
         # Konwersja timestamp
         df['timestamp'] = pd.to_datetime(df['timestamp'])
@@ -67,12 +66,6 @@ def calculate_metrics(df):
     best_trade = df['net_pnl'].max()
     worst_trade = df['net_pnl'].min()
     
-    # Sharpe ratio (uproszczona wersja)
-    if df['net_pnl'].std() != 0:
-        sharpe_ratio = df['net_pnl'].mean() / df['net_pnl'].std() * np.sqrt(len(df))
-    else:
-        sharpe_ratio = 0
-    
     # Max drawdown
     cumulative = df['cumulative_pnl']
     rolling_max = cumulative.expanding().max()
@@ -86,7 +79,6 @@ def calculate_metrics(df):
         'avg_trade_pnl': avg_trade_pnl,
         'best_trade': best_trade,
         'worst_trade': worst_trade,
-        'sharpe_ratio': sharpe_ratio,
         'max_drawdown': max_drawdown
     }
 
@@ -112,41 +104,21 @@ def main():
         # File info
         if os.path.exists("data/memory.csv"):
             file_size = os.path.getsize("data/memory.csv")
-            st.metric("Rozmiar pliku danych", f"{file_size / 1024 / 1024:.1f} MB")
-        
-        st.markdown("---")
-        
-        # Filtry czasowe
-        st.subheader("🕒 Filtry Czasowe")
-        time_filter = st.selectbox(
-            "Okres analizy",
-            ["Wszystko", "Ostatnie 24h", "Ostatnie 7 dni", "Ostatni miesiąc"]
-        )
+            st.metric("Rozmiar pliku danych", f"{file_size / 1024:.1f} KB")
     
     # Wczytaj dane
     df = load_trading_data()
     
     if df.empty:
         st.warning("⚠️ Brak danych do wyświetlenia")
+        st.info("Worker może jeszcze nie zapisał danych lub wystąpił problem z plikiem.")
         return
-    
-    # Filtrowanie czasowe
-    if time_filter != "Wszystko":
-        now = datetime.now()
-        if time_filter == "Ostatnie 24h":
-            cutoff = now - timedelta(hours=24)
-        elif time_filter == "Ostatnie 7 dni":
-            cutoff = now - timedelta(days=7)
-        elif time_filter == "Ostatni miesiąc":
-            cutoff = now - timedelta(days=30)
-        
-        df = df[df['timestamp'] >= cutoff]
     
     # Oblicz metryki
     metrics = calculate_metrics(df)
     
     if not metrics:
-        st.warning("⚠️ Brak danych dla wybranego okresu")
+        st.warning("⚠️ Nie można obliczyć metryk")
         return
     
     # Główne metryki
@@ -162,7 +134,6 @@ def main():
         )
     
     with col2:
-        pnl_color = "normal" if metrics['total_pnl'] >= 0 else "inverse"
         st.metric(
             "Całkowity P&L",
             f"${metrics['total_pnl']:.4f}",
@@ -177,9 +148,11 @@ def main():
         )
     
     with col4:
+        last_trade_time = df['timestamp'].max()
+        time_since = datetime.now() - last_trade_time.to_pydatetime()
         st.metric(
-            "Sharpe Ratio",
-            f"{metrics['sharpe_ratio']:.2f}",
+            "Ostatnia transakcja",
+            f"{time_since.seconds // 60}min temu",
             delta=None
         )
     
@@ -208,22 +181,19 @@ def main():
         )
     
     with col8:
-        last_trade_time = df['timestamp'].max()
-        time_since = datetime.now() - last_trade_time.to_pydatetime()
+        current_balance = metrics['total_pnl']
         st.metric(
-            "Ostatnia transakcja",
-            f"{time_since.seconds // 60}min temu",
+            "Aktualny bilans",
+            f"${current_balance:.4f}",
             delta=None
         )
     
     st.markdown("---")
     
-    # Wykresy
-    tab1, tab2, tab3, tab4 = st.tabs(["📈 Performance", "📊 Analiza Transakcji", "⏰ Aktywność w Czasie", "🎯 Risk Analysis"])
+    # Główny wykres - Cumulative P&L
+    st.subheader("📈 Cumulative P&L w czasie")
     
-    with tab1:
-        st.subheader("Cumulative P&L w czasie")
-        
+    try:
         fig_pnl = go.Figure()
         fig_pnl.add_trace(go.Scatter(
             x=df['timestamp'],
@@ -241,173 +211,86 @@ def main():
         )
         
         st.plotly_chart(fig_pnl, use_container_width=True)
-        
-        # Histogram P&L
+    except Exception as e:
+        st.error(f"Błąd wykresu P&L: {e}")
+    
+    # Tabs dla dodatkowych analiz
+    tab1, tab2 = st.tabs(["📊 Statystyki", "📋 Ostatnie Transakcje"])
+    
+    with tab1:
         col1, col2 = st.columns(2)
         
         with col1:
-            fig_hist = px.histogram(
-                df, 
-                x='net_pnl', 
-                nbins=50,
-                title="Rozkład P&L na transakcję",
-                color_discrete_sequence=['lightblue']
-            )
-            fig_hist.update_layout(height=300)
-            st.plotly_chart(fig_hist, use_container_width=True)
+            # Win/Loss ratio pie chart
+            try:
+                win_loss_data = pd.DataFrame({
+                    'Typ': ['Wygrane', 'Przegrane'],
+                    'Liczba': [len(df[df['profitable']]), len(df[~df['profitable']])]
+                })
+                
+                fig_pie = px.pie(
+                    win_loss_data, 
+                    values='Liczba', 
+                    names='Typ',
+                    title="Stosunek wygranych do przegranych",
+                    color_discrete_map={'Wygrane': 'green', 'Przegrane': 'red'}
+                )
+                fig_pie.update_layout(height=300)
+                st.plotly_chart(fig_pie, use_container_width=True)
+            except Exception as e:
+                st.error(f"Błąd wykresu kołowego: {e}")
         
         with col2:
-            # Win/Loss ratio pie chart
-            win_loss_data = pd.DataFrame({
-                'Typ': ['Wygrane', 'Przegrane'],
-                'Liczba': [len(df[df['profitable']]), len(df[~df['profitable']])]
-            })
-            
-            fig_pie = px.pie(
-                win_loss_data, 
-                values='Liczba', 
-                names='Typ',
-                title="Stosunek wygranych do przegranych",
-                color_discrete_map={'Wygrane': 'green', 'Przegrane': 'red'}
-            )
-            fig_pie.update_layout(height=300)
-            st.plotly_chart(fig_pie, use_container_width=True)
+            # Basic statistics table
+            st.subheader("📋 Podstawowe statystyki")
+            stats_data = {
+                'Metryka': [
+                    'Całkowite transakcje',
+                    'Transakcje wygrane',
+                    'Transakcje przegrane',
+                    'Wskaźnik wygranych',
+                    'Średni P&L na transakcję',
+                    'Całkowity P&L'
+                ],
+                'Wartość': [
+                    f"{metrics['total_trades']:,}",
+                    f"{len(df[df['profitable']]):,}",
+                    f"{len(df[~df['profitable']]):,}",
+                    f"{metrics['win_rate']:.1f}%",
+                    f"${metrics['avg_trade_pnl']:.4f}",
+                    f"${metrics['total_pnl']:.4f}"
+                ]
+            }
+            st.table(pd.DataFrame(stats_data))
     
     with tab2:
-        st.subheader("Szczegółowa analiza transakcji")
-        
-        # Statystyki price impact
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            fig_price_impact = px.histogram(
-                df,
-                x='price_impact',
-                nbins=30,
-                title="Rozkład Price Impact",
-                color_discrete_sequence=['orange']
-            )
-            st.plotly_chart(fig_price_impact, use_container_width=True)
-        
-        with col2:
-            # Scatter plot: price_impact vs pnl
-            fig_scatter = px.scatter(
-                df.sample(min(1000, len(df))),  # Sample dla wydajności
-                x='price_impact',
-                y='net_pnl',
-                title="Price Impact vs P&L",
-                color='profitable',
-                color_discrete_map={True: 'green', False: 'red'}
-            )
-            st.plotly_chart(fig_scatter, use_container_width=True)
-        
         # Ostatnie transakcje
         st.subheader("🕒 Ostatnie 20 transakcji")
-        recent_trades = df.tail(20)[['timestamp', 'input_token', 'output_token', 'amount_in', 'amount_out', 'price_impact', 'net_pnl', 'profitable']].copy()
-        recent_trades['timestamp'] = recent_trades['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
-        
-        # Kolorowanie wiersży
-        def color_row(row):
-            if row['profitable']:
-                return ['background-color: rgba(0, 255, 0, 0.1)'] * len(row)
+        try:
+            if len(df) > 0:
+                recent_trades = df.tail(20)[['timestamp', 'input_token', 'output_token', 'amount_in', 'amount_out', 'net_pnl', 'profitable']].copy()
+                recent_trades['timestamp'] = recent_trades['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
+                
+                # Uproszczone kolorowanie
+                st.dataframe(recent_trades, use_container_width=True)
+                
+                # Podsumowanie ostatnich 20
+                last_20_pnl = recent_trades['net_pnl'].sum()
+                last_20_wins = len(recent_trades[recent_trades['profitable']])
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("P&L ostatnich 20", f"${last_20_pnl:.4f}")
+                with col2:
+                    st.metric("Wygrane w ostatnich 20", f"{last_20_wins}/20")
             else:
-                return ['background-color: rgba(255, 0, 0, 0.1)'] * len(row)
-        
-        styled_df = recent_trades.style.apply(color_row, axis=1)
-        st.dataframe(styled_df, use_container_width=True)
+                st.warning("Brak transakcji do wyświetlenia")
+        except Exception as e:
+            st.error(f"Błąd wyświetlania transakcji: {e}")
     
-    with tab3:
-        st.subheader("Aktywność tradingowa w czasie")
-        
-        # Trades per hour
-        hourly_trades = df.groupby('hour').size().reset_index(name='trade_count')
-        
-        fig_hourly = px.bar(
-            hourly_trades,
-            x='hour',
-            y='trade_count',
-            title="Liczba transakcji według godziny",
-            color='trade_count',
-            color_continuous_scale='viridis'
-        )
-        st.plotly_chart(fig_hourly, use_container_width=True)
-        
-        # Daily performance
-        if len(df['date'].unique()) > 1:
-            daily_stats = df.groupby('date').agg({
-                'net_pnl': ['sum', 'count', 'mean'],
-                'profitable': 'sum'
-            }).round(4)
-            
-            daily_stats.columns = ['Daily_PnL', 'Trades_Count', 'Avg_PnL', 'Winning_Trades']
-            daily_stats['Win_Rate'] = (daily_stats['Winning_Trades'] / daily_stats['Trades_Count'] * 100).round(1)
-            daily_stats = daily_stats.reset_index()
-            
-            fig_daily = px.bar(
-                daily_stats,
-                x='date',
-                y='Daily_PnL',
-                title="Dzienny P&L",
-                color='Daily_PnL',
-                color_continuous_scale='RdYlGn'
-            )
-            st.plotly_chart(fig_daily, use_container_width=True)
-            
-            st.subheader("📊 Statystyki dzienne")
-            st.dataframe(daily_stats, use_container_width=True)
-    
-    with tab4:
-        st.subheader("Analiza ryzyka")
-        
-        # Drawdown analysis
-        cumulative = df['cumulative_pnl']
-        rolling_max = cumulative.expanding().max()
-        drawdown = cumulative - rolling_max
-        
-        fig_dd = go.Figure()
-        
-        fig_dd.add_trace(go.Scatter(
-            x=df['timestamp'],
-            y=drawdown,
-            fill='tonexty',
-            mode='lines',
-            name='Drawdown',
-            line=dict(color='red')
-        ))
-        
-        fig_dd.update_layout(
-            title="Analiza Drawdown",
-            xaxis_title="Czas",
-            yaxis_title="Drawdown ($)",
-            height=400
-        )
-        
-        st.plotly_chart(fig_dd, use_container_width=True)
-        
-        # Risk metrics table
-        risk_metrics = {
-            'Metryka': [
-                'Max Drawdown',
-                'Volatility (std)',
-                'Sharpe Ratio',
-                'Worst Trade',
-                'Best Trade',
-                'Avg Trade P&L',
-                '95% VaR (dzienne)'
-            ],
-            'Wartość': [
-                f"${metrics['max_drawdown']:.4f}",
-                f"${df['net_pnl'].std():.4f}",
-                f"{metrics['sharpe_ratio']:.2f}",
-                f"${metrics['worst_trade']:.4f}",
-                f"${metrics['best_trade']:.4f}",
-                f"${metrics['avg_trade_pnl']:.4f}",
-                f"${df['net_pnl'].quantile(0.05):.4f}"
-            ]
-        }
-        
-        st.subheader("📋 Tabela metryk ryzyka")
-        st.table(pd.DataFrame(risk_metrics))
+    # Auto refresh info
+    st.markdown("---")
+    st.info("💡 Kliknij 'Odśwież Dane' w menu po lewej aby zobaczyć najnowsze transakcje")
 
 if __name__ == "__main__":
     main()
