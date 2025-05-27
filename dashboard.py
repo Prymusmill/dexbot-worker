@@ -1,4 +1,4 @@
-# dashboard_simple.py - Prostszy dashboard bez problematycznych wykresów
+# dashboard.py - Fixed version without indentation errors
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 import os
 import numpy as np
 import time
-import asyncio
 
 # Konfiguracja strony
 st.set_page_config(
@@ -85,31 +84,31 @@ def calculate_metrics(df):
     }
 
 def main():
-   # Header
-   st.title("🚀 DexBot Trading Dashboard")
-   st.markdown("---")
-   
-   # Auto-refresh w sidebar - lepsze rozwiązanie
-   auto_refresh = st.sidebar.checkbox("🔄 Auto-refresh (60s)", value=True)
-   
-   if auto_refresh:
-       # Refresh co 5 sekund dla smooth countdown
-       if 'refresh_counter' not in st.session_state:
-           st.session_state.refresh_counter = 60
-       
-       st.sidebar.write(f"⏱️ Refresh za: {st.session_state.refresh_counter}s")
-       
-       if st.session_state.refresh_counter <= 0:
-           st.session_state.refresh_counter = 60
-           st.cache_data.clear()
-           st.rerun()
-       else:
-           st.session_state.refresh_counter -= 5
-           time.sleep(5)
-           st.rerun()
-   
-   # Sidebar
-   with st.sidebar:
+    # Header
+    st.title("🚀 DexBot Trading Dashboard")
+    st.markdown("---")
+    
+    # Auto-refresh w sidebar - lepsze rozwiązanie
+    auto_refresh = st.sidebar.checkbox("🔄 Auto-refresh (60s)", value=True)
+    
+    if auto_refresh:
+        # Refresh co 5 sekund dla smooth countdown
+        if 'refresh_counter' not in st.session_state:
+            st.session_state.refresh_counter = 60
+        
+        st.sidebar.write(f"⏱️ Refresh za: {st.session_state.refresh_counter}s")
+        
+        if st.session_state.refresh_counter <= 0:
+            st.session_state.refresh_counter = 60
+            st.cache_data.clear()
+            st.rerun()
+        else:
+            st.session_state.refresh_counter -= 5
+            time.sleep(5)
+            st.rerun()
+    
+    # Sidebar
+    with st.sidebar:
         st.header("⚙️ Kontrola")
         
         # Status
