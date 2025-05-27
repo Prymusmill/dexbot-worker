@@ -1,2 +1,9 @@
+pandas
+numpy
+scipy
+flask
 streamlit
 plotly
+websocket-client
+requests
+talib-binary
