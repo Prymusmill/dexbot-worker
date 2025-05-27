@@ -1,9 +1,10 @@
-# core/market_data.py
+# core/market_data.py - Complete version with enhanced technical indicators
 import websocket
 import json
 import threading
 import time
 import requests
+import numpy as np
 from datetime import datetime, timedelta
 from typing import Dict, List, Callable, Optional
 import logging
@@ -27,7 +28,26 @@ class BinanceMarketData:
         self.rsi = 50.0
         self.volatility = 0.0
         
+        # Enhanced technical analysis components
+        self.data_manager = None
+        self.signal_generator = None
+        
         self.logger = logging.getLogger(__name__)
+        
+        # Initialize technical analysis components after import
+        self._init_technical_components()
+        
+    def _init_technical_components(self):
+        """Initialize technical analysis components"""
+        try:
+            from core.technical_indicators import MarketDataManager, SignalGenerator
+            self.data_manager = MarketDataManager()
+            self.signal_generator = SignalGenerator()
+            print("✅ Technical analysis components initialized")
+        except ImportError:
+            print("⚠️ Technical indicators not available - using basic analysis")
+            self.data_manager = None
+            self.signal_generator = None
         
     def get_historical_data(self, symbol: str = "SOLUSDC", interval: str = "1m", limit: int = 100):
         """Pobierz dane historyczne z Binance REST API"""
@@ -57,6 +77,22 @@ class BinanceMarketData:
                 })
             
             print(f"✅ Pobrano {len(candles)} świec historycznych dla {symbol}")
+            
+            # Initialize price history with historical data
+            self.price_history = [candle['close'] for candle in candles[-50:]]
+            self.current_price = candles[-1]['close']
+            
+            # Add to data manager if available
+            if self.data_manager:
+                for candle in candles[-50:]:  # Last 50 candles
+                    self.data_manager.add_data_point(
+                        price=candle['close'],
+                        volume=candle['volume'],
+                        high=candle['high'],
+                        low=candle['low'],
+                        timestamp=candle['timestamp']
+                    )
+            
             return candles
             
         except Exception as e:
@@ -64,38 +100,72 @@ class BinanceMarketData:
             return []
     
     def calculate_technical_indicators(self, prices: List[float]):
-        """Oblicz wskaźniki techniczne"""
+        """Oblicz wskaźniki techniczne using custom implementation"""
         try:
-            if len(prices) < 50:
+            if len(prices) < 20:
                 return
                 
-            import talib
-            import numpy as np
-            
-            prices_array = np.array(prices[-50:])  # Ostatnie 50 cen
-            
-            # Simple Moving Averages
-            if len(prices_array) >= 20:
-                self.sma_20 = float(talib.SMA(prices_array, timeperiod=20)[-1])
-            if len(prices_array) >= 50:
-                self.sma_50 = float(talib.SMA(prices_array, timeperiod=50)[-1])
+            # Basic indicators using numpy (fallback)
+            if len(prices) >= 20:
+                self.sma_20 = float(np.mean(prices[-20:]))
+            if len(prices) >= 50:
+                self.sma_50 = float(np.mean(prices[-50:]))
                 
-            # RSI
-            if len(prices_array) >= 14:
-                rsi_values = talib.RSI(prices_array, timeperiod=14)
-                self.rsi = float(rsi_values[-1]) if not np.isnan(rsi_values[-1]) else 50.0
+            # Basic RSI calculation
+            if len(prices) >= 15:
+                self.rsi = self._calculate_basic_rsi(prices)
             
             # Volatility (standard deviation)
-            if len(prices_array) >= 20:
-                self.volatility = float(np.std(prices_array[-20:]))
+            if len(prices) >= 20:
+                self.volatility = float(np.std(prices[-20:]))
                 
-            print(f"📊 Indicators - SMA20: {self.sma_20:.4f}, RSI: {self.rsi:.1f}, Vol: {self.volatility:.4f}")
+            # Try to use advanced technical indicators if available
+            if self.data_manager:
+                try:
+                    from core.technical_indicators import TechnicalIndicators
+                    
+                    # Use professional indicators
+                    self.sma_20 = TechnicalIndicators.sma(prices, 20)
+                    self.sma_50 = TechnicalIndicators.sma(prices, 50)
+                    self.rsi = TechnicalIndicators.rsi(prices, 14)
+                    
+                    print(f"📊 Professional Indicators - SMA20: {self.sma_20:.4f}, SMA50: {self.sma_50:.4f}, RSI: {self.rsi:.1f}")
+                    return
+                except ImportError:
+                    pass
+            
+            print(f"📊 Basic Indicators - SMA20: {self.sma_20:.4f}, RSI: {self.rsi:.1f}, Vol: {self.volatility:.4f}")
             
         except Exception as e:
             print(f"⚠️ Błąd obliczania wskaźników: {e}")
     
+    def _calculate_basic_rsi(self, prices: List[float], period: int = 14) -> float:
+        """Basic RSI calculation using numpy"""
+        try:
+            if len(prices) < period + 1:
+                return 50.0
+            
+            prices_array = np.array(prices)
+            deltas = np.diff(prices_array)
+            
+            gains = np.where(deltas > 0, deltas, 0)
+            losses = np.where(deltas < 0, -deltas, 0)
+            
+            avg_gain = np.mean(gains[-period:])
+            avg_loss = np.mean(losses[-period:])
+            
+            if avg_loss == 0:
+                return 100.0
+            
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
+            
+            return float(rsi)
+        except:
+            return 50.0
+    
     def on_message(self, ws, message):
-        """Obsłuż wiadomość z WebSocket"""
+        """Enhanced message handler with technical analysis"""
         try:
             data = json.loads(message)
             
@@ -115,11 +185,21 @@ class BinanceMarketData:
                 if len(self.price_history) > 200:
                     self.price_history = self.price_history[-200:]
                 
+                # Add to enhanced data manager if available
+                if self.data_manager:
+                    self.data_manager.add_data_point(
+                        price=self.current_price,
+                        volume=self.volume_24h,
+                        high=self.current_price,  # Simplified for ticker data
+                        low=self.current_price,
+                        timestamp=self.last_update
+                    )
+                
                 # Oblicz wskaźniki techniczne co 10 nowych cen
                 if len(self.price_history) % 10 == 0:
                     self.calculate_technical_indicators(self.price_history)
                 
-                # Przygotuj dane dla callback
+                # Prepare basic market data
                 market_data = {
                     'price': self.current_price,
                     'bid': self.bid_price,
@@ -131,8 +211,44 @@ class BinanceMarketData:
                     'sma_50': self.sma_50,
                     'rsi': self.rsi,
                     'volatility': self.volatility,
-                    'spread': self.ask_price - self.bid_price
+                    'spread': self.ask_price - self.bid_price,
+                    'price_history': self.price_history.copy()
                 }
+                
+                # Enhanced analysis if technical components available
+                if self.data_manager and self.signal_generator:
+                    try:
+                        # Get professional technical indicators
+                        indicators = self.data_manager.get_current_indicators()
+                        
+                        # Generate trading signals
+                        analysis_data = self.data_manager.get_data_for_analysis()
+                        analysis_data.update({
+                            'price': self.current_price,
+                            'volatility': self.volatility,
+                            'price_change_24h': self.price_change_24h
+                        })
+                        
+                        signals = self.signal_generator.generate_signals(analysis_data)
+                        
+                        # Add enhanced data to market_data
+                        market_data.update({
+                            'indicators': indicators,
+                            'signals': signals,
+                            'analysis_enhanced': True
+                        })
+                        
+                        # Log enhanced signals periodically
+                        if len(self.price_history) % 30 == 0:  # Every 30 updates
+                            action = signals.get('action', 'hold')
+                            confidence = signals.get('confidence', 0.0)
+                            print(f"🎯 Signal: {action.upper()} (confidence: {confidence:.2f})")
+                        
+                    except Exception as e:
+                        print(f"⚠️ Enhanced analysis error: {e}")
+                        market_data['analysis_enhanced'] = False
+                else:
+                    market_data['analysis_enhanced'] = False
                 
                 # Wywołaj callback
                 self.on_price_update(market_data)
@@ -160,8 +276,6 @@ class BinanceMarketData:
             # Pobierz dane historyczne na start
             historical = self.get_historical_data(symbol.upper())
             if historical:
-                self.price_history = [candle['close'] for candle in historical[-50:]]
-                self.current_price = historical[-1]['close']
                 self.calculate_technical_indicators(self.price_history)
             
             # URL dla Binance WebSocket - 24hr ticker
@@ -196,7 +310,7 @@ class BinanceMarketData:
     
     def get_current_data(self) -> Dict:
         """Pobierz aktualne dane rynkowe"""
-        return {
+        base_data = {
             'price': self.current_price,
             'bid': self.bid_price,
             'ask': self.ask_price,
@@ -208,11 +322,37 @@ class BinanceMarketData:
             'rsi': self.rsi,
             'volatility': self.volatility,
             'spread': self.ask_price - self.bid_price if self.ask_price and self.bid_price else 0.0,
-            'is_connected': self.running
+            'is_connected': self.running,
+            'price_history': self.price_history.copy()
         }
+        
+        # Add enhanced data if available
+        if self.data_manager and self.signal_generator:
+            try:
+                indicators = self.data_manager.get_current_indicators()
+                analysis_data = self.data_manager.get_data_for_analysis()
+                analysis_data.update({
+                    'price': self.current_price,
+                    'volatility': self.volatility,
+                    'price_change_24h': self.price_change_24h
+                })
+                signals = self.signal_generator.generate_signals(analysis_data)
+                
+                base_data.update({
+                    'indicators': indicators,
+                    'signals': signals,
+                    'analysis_enhanced': True
+                })
+            except Exception as e:
+                print(f"⚠️ Error getting enhanced data: {e}")
+                base_data['analysis_enhanced'] = False
+        else:
+            base_data['analysis_enhanced'] = False
+        
+        return base_data
 
 class TradingSignals:
-    """Generator sygnałów tradingowych na podstawie danych rynkowych"""
+    """Enhanced trading signals with professional analysis"""
     
     @staticmethod
     def analyze_market_conditions(market_data: Dict) -> Dict:
@@ -227,12 +367,35 @@ class TradingSignals:
         
         try:
             price = market_data['price']
-            sma_20 = market_data['sma_20']
-            sma_50 = market_data['sma_50']
-            rsi = market_data['rsi']
-            volatility = market_data['volatility']
-            price_change_24h = market_data['price_change_24h']
+            sma_20 = market_data.get('sma_20', 0)
+            sma_50 = market_data.get('sma_50', 0)
+            rsi = market_data.get('rsi', 50)
+            volatility = market_data.get('volatility', 0.01)
+            price_change_24h = market_data.get('price_change_24h', 0)
             
+            # Check for enhanced signals first
+            if market_data.get('analysis_enhanced') and 'signals' in market_data:
+                enhanced_signals = market_data['signals']
+                signals.update({
+                    'action': enhanced_signals.get('action', 'hold'),
+                    'confidence': enhanced_signals.get('confidence', 0.0),
+                    'strength': enhanced_signals.get('strength', 0.0),
+                    'reasons': enhanced_signals.get('reasons', []),
+                    'risk_level': enhanced_signals.get('risk_level', 'medium')
+                })
+                
+                # Determine trend from action
+                action = signals['action']
+                if 'buy' in action:
+                    signals['trend'] = 'bullish'
+                elif 'sell' in action:
+                    signals['trend'] = 'bearish'
+                else:
+                    signals['trend'] = 'neutral'
+                
+                return signals
+            
+            # Fallback to basic analysis
             # Analiza trendu (SMA crossover)
             if sma_20 > 0 and sma_50 > 0:
                 if sma_20 > sma_50:
