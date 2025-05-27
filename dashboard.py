@@ -110,7 +110,7 @@ def main():
    
    # Sidebar
    with st.sidebar:
-       st.header("⚙️ Kontrola")
+        st.header("⚙️ Kontrola")
         
         # Status
         st.subheader("Status Systemu")
