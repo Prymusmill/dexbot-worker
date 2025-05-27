@@ -1,8 +1,17 @@
-[environments.production.services.worker]
+[[services]]
+name = "worker"
+source = "."
+build.buildCommand = "pip install -r requirements.txt"
 build.startCommand = "python run_worker.py"
 
-[environments.production.services.api]  
+[[services]]
+name = "api"
+source = "."
+build.buildCommand = "pip install -r requirements.txt"
 build.startCommand = "python serve.py"
 
-[environments.production.services.dashboard]
+[[services]]
+name = "dashboard"
+source = "."
+build.buildCommand = "pip install -r requirements.txt"
 build.startCommand = "streamlit run dashboard.py --server.port=$PORT --server.address=0.0.0.0"
