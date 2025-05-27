@@ -6,4 +6,3 @@ streamlit
 plotly
 websocket-client
 requests
-talib-binary
