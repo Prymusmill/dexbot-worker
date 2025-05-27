@@ -1,4 +1,3 @@
-pandas
-numpy
-scipy
-flask
+streamlit
+plotly
+streamlit-autorefresh
