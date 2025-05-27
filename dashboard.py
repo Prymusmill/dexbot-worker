@@ -6,6 +6,8 @@ import plotly.express as px
 from datetime import datetime, timedelta
 import os
 import numpy as np
+import time
+import asyncio
 
 # Konfiguracja strony
 st.set_page_config(
@@ -83,6 +85,28 @@ def calculate_metrics(df):
     }
 
 def main():
+    # Auto-refresh configuration
+    auto_refresh = st.sidebar.checkbox("🔄 Auto-refresh (60s)", value=True)
+    
+    if auto_refresh:
+        # Create a placeholder for countdown
+        refresh_placeholder = st.sidebar.empty()
+        
+        # Auto-refresh logic
+        if 'last_refresh' not in st.session_state:
+            st.session_state.last_refresh = time.time()
+        
+        time_since_refresh = time.time() - st.session_state.last_refresh
+        time_until_refresh = 60 - time_since_refresh
+        
+        if time_until_refresh <= 0:
+            st.session_state.last_refresh = time.time()
+            st.rerun()
+        else:
+            refresh_placeholder.write(f"⏱️ Refresh za: {int(time_until_refresh)}s")
+            time.sleep(1)
+            st.rerun()    
+
     # Header
     st.title("🚀 DexBot Trading Dashboard")
     st.markdown("---")
