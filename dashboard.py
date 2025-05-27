@@ -127,7 +127,7 @@ def main():
             st.metric("Rozmiar pliku danych", f"{file_size / 1024:.1f} KB")
     
     # Wczytaj dane
-    df = load_trading_data()
+df = load_trading_data()
     
     if df.empty:
         st.warning("⚠️ Brak danych do wyświetlenia")
