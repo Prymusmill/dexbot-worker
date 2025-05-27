@@ -6,7 +6,7 @@ import plotly.express as px
 from datetime import datetime, timedelta
 import os
 import numpy as np
-from streamlit_autorefresh import st_autorefresh
+#from streamlit_autorefresh import st_autorefresh)
 
 # Konfiguracja strony
 st.set_page_config(
@@ -17,7 +17,7 @@ st.set_page_config(
 )
 
 # Auto-refresh co 30 sekund (opcjonalnie)
-st_autorefresh(interval=30000, key="datarefresh")
+#st_autorefresh(interval=30000, key="datarefresh")
 
 @st.cache_data
 def load_trading_data():
