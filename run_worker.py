@@ -29,7 +29,6 @@ try:
     print("✅ ML modules available")
 except ImportError as e:
     print(f"⚠️ ML modules not available: {e}")
-    ML_AVAILABLE = False
 
 STATE_FILE = "data/state.json"
 MEMORY_FILE = "data/memory.csv"
