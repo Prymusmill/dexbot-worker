@@ -1,4 +1,4 @@
-# dashboard.py - Complete dashboard with ML integration
+# dashboard.py - Complete dashboard with ML integration (FIXED CACHE)
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -14,7 +14,7 @@ st.set_page_config(
     layout="wide"
 )
 
-@st.cache_data
+# FIXED: Usunięto @st.cache_data żeby zawsze ładować najnowsze dane
 def load_trading_data():
     try:
         if not os.path.exists("data/memory.csv"):
@@ -84,20 +84,47 @@ def calculate_metrics(df):
     }
 
 def display_ml_predictions(df):
-    """Display ML predictions section"""
+    """Display ML predictions section - FIXED"""
     st.header("🤖 Machine Learning Predictions")
+    
+    # DODANE: Info o aktualnym stanie danych
+    st.info(f"📊 Załadowano {len(df)} transakcji. ML wymaga minimum 100.")
     
     try:
         # Try to load ML integration
         from ml.price_predictor import MLTradingIntegration
         ml_integration = MLTradingIntegration()
+        st.success("✅ ML Integration loaded successfully")
         
         # Check if we have enough data
         if len(df) >= 100:
             with st.spinner("Generating ML prediction..."):
-                prediction = ml_integration.get_ensemble_prediction(df.tail(200))
+                # DODANE: Debug info
+                st.write(f"🔍 Próbuję wygenerować predykcję dla {len(df)} transakcji...")
+                
+                # Check required columns
+                required_cols = ['price', 'volume', 'rsi']
+                missing_cols = [col for col in required_cols if col not in df.columns]
+                
+                if missing_cols:
+                    st.error(f"❌ Brakuje kolumn ML: {missing_cols}")
+                    st.write(f"📋 Dostępne kolumny: {list(df.columns)}")
+                    return
+                else:
+                    st.success(f"✅ Wszystkie kolumny ML obecne: {required_cols}")
+                
+                try:
+                    prediction = ml_integration.get_ensemble_prediction(df.tail(200))
+                    st.write(f"🔍 Otrzymana predykcja: {prediction}")
+                except Exception as e:
+                    st.error(f"❌ Błąd generowania predykcji: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
+                    return
             
-            if 'predicted_price' in prediction:
+            if prediction and 'predicted_price' in prediction:
+                st.success("🎉 ML Prediction wygenerowana pomyślnie!")
+                
                 # Main prediction metrics
                 col1, col2, col3, col4 = st.columns(4)
                 
@@ -129,7 +156,7 @@ def display_ml_predictions(df):
                 with col4:
                     st.metric(
                         "🤖 Modeli aktywnych",
-                        prediction['model_count'],
+                        prediction.get('model_count', 1),
                         delta=None
                     )
                 
@@ -138,10 +165,10 @@ def display_ml_predictions(df):
                     st.subheader("🔍 Predykcje poszczególnych modeli")
                     
                     pred_data = []
-                    current_price = prediction['current_price']
+                    current_price = prediction.get('current_price', df['price'].iloc[-1] if 'price' in df.columns else 0)
                     
                     for model_name, pred_price in prediction['individual_predictions'].items():
-                        change_pct = ((pred_price - current_price) / current_price) * 100
+                        change_pct = ((pred_price - current_price) / current_price) * 100 if current_price > 0 else 0
                         pred_data.append({
                             'Model': model_name.replace('_', ' ').title(),
                             'Przewidywana cena': f"${pred_price:.4f}",
@@ -182,46 +209,50 @@ def display_ml_predictions(df):
                 # Create prediction vs actual chart
                 try:
                     recent_data = df.tail(50)
-                    fig_pred = go.Figure()
-                    
-                    # Actual prices
-                    fig_pred.add_trace(go.Scatter(
-                        x=recent_data['timestamp'],
-                        y=recent_data['amount_out'],
-                        mode='lines',
-                        name='Actual Price',
-                        line=dict(color='blue', width=2)
-                    ))
-                    
-                    # Predicted price (as a point)
-                    fig_pred.add_trace(go.Scatter(
-                        x=[datetime.now()],
-                        y=[prediction['predicted_price']],
-                        mode='markers',
-                        name=f'ML Prediction ({prediction["direction"].upper()})',
-                        marker=dict(
-                            color='green' if prediction['direction'] == 'up' else 'red',
-                            size=15,
-                            symbol='triangle-up' if prediction['direction'] == 'up' else 'triangle-down'
+                    if 'price' in df.columns:
+                        fig_pred = go.Figure()
+                        
+                        # Actual prices
+                        fig_pred.add_trace(go.Scatter(
+                            x=recent_data['timestamp'],
+                            y=recent_data['price'],
+                            mode='lines',
+                            name='Actual Price',
+                            line=dict(color='blue', width=2)
+                        ))
+                        
+                        # Predicted price (as a point)
+                        fig_pred.add_trace(go.Scatter(
+                            x=[datetime.now()],
+                            y=[prediction['predicted_price']],
+                            mode='markers',
+                            name=f'ML Prediction ({prediction["direction"].upper()})',
+                            marker=dict(
+                                color='green' if prediction['direction'] == 'up' else 'red',
+                                size=15,
+                                symbol='triangle-up' if prediction['direction'] == 'up' else 'triangle-down'
+                            )
+                        ))
+                        
+                        fig_pred.update_layout(
+                            title="Aktualne Ceny vs ML Predykcja",
+                            xaxis_title="Czas",
+                            yaxis_title="Cena ($)",
+                            height=400
                         )
-                    ))
-                    
-                    fig_pred.update_layout(
-                        title="Aktualne Ceny vs ML Predykcja",
-                        xaxis_title="Czas",
-                        yaxis_title="Cena ($)",
-                        height=400
-                    )
-                    
-                    st.plotly_chart(fig_pred, use_container_width=True)
+                        
+                        st.plotly_chart(fig_pred, use_container_width=True)
+                    else:
+                        st.warning("⚠️ Brak kolumny 'price' do wykresu")
                     
                 except Exception as e:
                     st.warning(f"⚠️ Nie można utworzyć wykresu predykcji: {e}")
                 
             else:
-                st.warning("⚠️ Nie udało się wygenerować predykcji ML")
-                if 'error' in prediction:
+                st.error("❌ Nie udało się wygenerować predykcji ML")
+                if prediction and 'error' in prediction:
                     st.error(f"Błąd: {prediction['error']}")
+                st.write(f"🔍 Otrzymana odpowiedź: {prediction}")
         else:
             st.info(f"📊 Potrzeba więcej danych do predykcji ML (obecne: {len(df)}/100 transakcji)")
             
@@ -230,11 +261,13 @@ def display_ml_predictions(df):
             st.progress(progress)
             st.caption(f"Postęp do pierwszej predykcji ML: {len(df)}/100 transakcji")
     
-    except ImportError:
-        st.error("❌ Moduły ML nie są dostępne")
+    except ImportError as e:
+        st.error(f"❌ Moduły ML nie są dostępne: {e}")
         st.info("💡 Aby włączyć predykcje ML, upewnij się że system ma zainstalowane: scikit-learn, tensorflow")
     except Exception as e:
         st.error(f"❌ Błąd ML: {e}")
+        import traceback
+        st.code(traceback.format_exc())
 
 def display_trading_performance(df, metrics):
     """Display comprehensive trading performance"""
@@ -306,7 +339,7 @@ def display_trading_performance(df, metrics):
         )
 
 def main():
-    # Auto-refresh functionality
+    # Auto-refresh functionality - FIXED: zawsze czyść cache przy refresh
     auto_refresh = st.sidebar.checkbox("🔄 Auto-refresh (60s)", value=False)
     
     if auto_refresh:
@@ -317,7 +350,7 @@ def main():
         
         if st.session_state.refresh_counter <= 0:
             st.session_state.refresh_counter = 60
-            st.cache_data.clear()
+            # REMOVED: st.cache_data.clear() - nie ma już cache
             st.rerun()
         else:
             st.session_state.refresh_counter -= 5
@@ -339,7 +372,7 @@ def main():
         
         # Manual refresh button
         if st.button("🔄 Odśwież Dane"):
-            st.cache_data.clear()
+            # REMOVED: st.cache_data.clear() - nie ma już cache
             st.rerun()
         
         # File info
@@ -354,7 +387,7 @@ def main():
         if st.button("🔄 Retrain ML Models"):
             st.info("🤖 Model retraining będzie uruchomiony w tle...")
 
-    # Load data
+    # Load data - ZAWSZE najnowsze dane
     df = load_trading_data()
     
     if df.empty:
@@ -523,7 +556,7 @@ def main():
     
     # Footer info
     st.markdown("---")
-    st.info("💡 Dashboard aktualizuje się automatycznie z danymi z bota tradingowego. Włącz auto-refresh dla live updates.")
+    st.info("💡 Dashboard ładuje najnowsze dane przy każdym odświeżeniu. Włącz auto-refresh dla live updates.")
     
     # System info
     with st.expander("🔍 System Info"):
