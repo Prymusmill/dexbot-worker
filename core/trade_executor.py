@@ -139,32 +139,43 @@ class EnhancedTradeExecutor:
         os.makedirs("data", exist_ok=True)
         file_exists = os.path.isfile(MEMORY_FILE)
         
-        # POPRAWIONE: Kompletne headers z wszystkimi kolumnami ML
+        # Headers - MUSZĄ być dokładnie 9 kolumn
         headers = ["timestamp", "input_token", "output_token", "amount_in", "amount_out", "price_impact", "price", "volume", "rsi"]
         
-        # POPRAWIONE: Kompletny row z wszystkimi wartościami
         # Pobierz dane z market_data lub użyj wartości domyślnych
         current_price = market_data.get('price', trade_result.market_price) if market_data else trade_result.market_price
         current_rsi = market_data.get('rsi', 50.0) if market_data else 50.0
         volume = trade_result.amount_in  # Volume jako wartość transakcji
         
+        # Row - MUSI mieć dokładnie 9 wartości (pasujących do headers)
         row = [
-            trade_result.timestamp,
-            trade_result.input_token,
-            trade_result.output_token,
-            trade_result.amount_in,
-            trade_result.amount_out,
-            trade_result.price_impact,
-            current_price,    # DODANE: price dla ML
-            volume,          # DODANE: volume dla ML  
-            current_rsi      # DODANE: rsi dla ML
+            trade_result.timestamp,           # 1
+            trade_result.input_token,         # 2  
+            trade_result.output_token,        # 3
+            trade_result.amount_in,           # 4
+            trade_result.amount_out,          # 5
+            trade_result.price_impact,        # 6
+            current_price,                    # 7
+            volume,                          # 8
+            current_rsi                      # 9
         ]
         
-        with open(MEMORY_FILE, "a", newline="") as f:
-            writer = csv.writer(f)
-            if not file_exists or os.stat(MEMORY_FILE).st_size == 0:
-                writer.writerow(headers)
-            writer.writerow(row)
+        # KRYTYCZNE: Sprawdź czy liczba wartości = liczba headers
+        if len(row) != len(headers):
+            print(f"❌ CSV ERROR: {len(headers)} headers vs {len(row)} values")
+            return
+        
+        # Zapisz do CSV z proper newline handling
+        try:
+            with open(MEMORY_FILE, "a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                if not file_exists or os.stat(MEMORY_FILE).st_size == 0:
+                    writer.writerow(headers)
+                writer.writerow(row)
+        except Exception as e:
+            print(f"❌ CSV write error: {e}")
+            print(f"Headers: {headers}")
+            print(f"Row: {row}")
 
 # Funkcja kompatybilności wstecznej
 def simulate_trade(settings):
