@@ -1,4 +1,4 @@
-# run_worker.py - Enhanced with real-time market data and ML integration (FIXED)
+# run_worker.py - OPTIMIZED with Adaptive ML Trading
 import os
 import sys
 import time
@@ -22,12 +22,12 @@ except ImportError as e:
     print(f"❌ Import error: {e}")
     sys.exit(1)
 
-# ML Integration with safe fallback - FIXED: Initialize ML_AVAILABLE first
+# Enhanced ML Integration
 ML_AVAILABLE = False
 try:
     from ml.price_predictor import MLTradingIntegration
     ML_AVAILABLE = True
-    print("✅ ML modules available")
+    print("✅ Enhanced ML modules available")
 except ImportError as e:
     print(f"⚠️ ML modules not available: {e}")
     ML_AVAILABLE = False
@@ -35,7 +35,7 @@ except ImportError as e:
 STATE_FILE = "data/state.json"
 MEMORY_FILE = "data/memory.csv"
 
-class TradingBot:
+class OptimizedTradingBot:
     def __init__(self):
         self.trade_executor = get_trade_executor()
         self.market_service = None
@@ -43,538 +43,477 @@ class TradingBot:
         self.trading_signals = TradingSignals()
         self.state = {"count": 0}
         
-        # Initialize ML attributes regardless of availability
+        # Enhanced ML attributes
         self.ml_predictions = {}
         self.ml_prediction_count = 0
         self.last_ml_training = None
+        self.ml_performance_history = []
         
-        # ML Integration setup
+        # Adaptive trading attributes
+        self.current_confidence = 0.5
+        self.market_volatility = 0.01
+        self.adaptive_cycle_size = settings.get("trades_per_cycle", 50)
+        self.adaptive_delay = settings.get("cycle_delay_seconds", 30)
+        
+        # Performance tracking
+        self.cycle_performance = []
+        self.recent_win_rate = 0.5
+        
+        # Enhanced ML Integration
         if ML_AVAILABLE:
             try:
                 self.ml_integration = MLTradingIntegration()
-                print("🤖 ML integration initialized")
+                print("🤖 Enhanced ML integration initialized")
             except Exception as e:
-                print(f"⚠️ ML integration failed: {e}")
+                print(f"⚠️ Enhanced ML integration failed: {e}")
                 self.ml_integration = None
         else:
             self.ml_integration = None
             
     def on_market_data_update(self, market_data: Dict):
-        """Callback wywoływany przy każdej aktualizacji danych rynkowych"""
+        """Enhanced callback with volatility tracking"""
         self.latest_market_data = market_data
         self.trade_executor.update_market_data(market_data)
         
-        # Log market data co 30 sekund
+        # Update market volatility
+        self.market_volatility = market_data.get('volatility', 0.01)
+        
+        # Log market data with ML info
         if hasattr(self, '_last_market_log'):
             if (datetime.now() - self._last_market_log).seconds >= 30:
-                self._log_market_data(market_data)
+                self._log_enhanced_market_data(market_data)
                 self._last_market_log = datetime.now()
         else:
-            self._log_market_data(market_data)
+            self._log_enhanced_market_data(market_data)
             self._last_market_log = datetime.now()
     
-    def _log_market_data(self, market_data: Dict):
-        """Loguj dane rynkowe"""
+    def _log_enhanced_market_data(self, market_data: Dict):
+        """Enhanced market data logging with ML insights"""
         price = market_data.get('price', 0)
         rsi = market_data.get('rsi', 0)
+        volatility = market_data.get('volatility', 0.01)
         trend = 'up' if market_data.get('price_change_24h', 0) > 0 else 'down'
         
-        # Safe ML info check
+        # ML insights
         ml_info = ""
         if self.ml_predictions:
             direction = self.ml_predictions.get('direction', 'unknown')
             confidence = self.ml_predictions.get('confidence', 0)
-            ml_info = f", ML: {direction.upper()} ({confidence:.2f})"
+            agreement = self.ml_predictions.get('model_agreement', 0)
+            ml_info = f", ML: {direction.upper()} ({confidence:.2f} conf, {agreement:.2f} agree)"
         
-        print(f"📊 Market: SOL/USDC ${price:.4f}, RSI: {rsi:.1f}, 24h: {trend}{ml_info}")
+        # Adaptive info
+        adaptive_info = f", Adaptive: {self.adaptive_cycle_size} trades/{self.adaptive_delay}s"
+        
+        print(f"📊 Market: SOL/USDC ${price:.4f}, RSI: {rsi:.1f}, Vol: {volatility:.4f}, "
+              f"24h: {trend}{ml_info}{adaptive_info}")
     
     def update_ml_predictions(self):
-        """Update ML predictions based on recent data"""
+        """Enhanced ML predictions with ensemble"""
         if not self.ml_integration:
             return
         
         try:
-            # Get recent trading data for ML prediction
-            if os.path.exists(MEMORY_FILE):
-                df = pd.read_csv(MEMORY_FILE)
+            # Get data for ML
+            data_result = self.trade_executor.get_recent_transactions_hybrid(limit=500)
+            
+            if data_result and data_result['count'] >= 100:
+                df = data_result['data']
+                print(f"🤖 Generating enhanced ML predictions from {len(df)} transactions...")
                 
-                if len(df) >= 100:  # Zawsze sprawdzaj jeśli masz dane
-                    print("🤖 Forcing ML predictions update...", flush=True)
-                    # Get ensemble prediction
-                    prediction = self.ml_integration.get_ensemble_prediction(df.tail(200))
+                prediction = self.ml_integration.get_ensemble_prediction(df)
+                
+                if 'predicted_price' in prediction:
+                    self.ml_predictions = prediction
+                    self.ml_prediction_count += 1
+                    self.current_confidence = prediction.get('confidence', 0.5)
                     
-                    if 'predicted_price' in prediction:
-                        self.ml_predictions = prediction
-                        self.ml_prediction_count += 1
+                    # Log detailed prediction
+                    if self.ml_prediction_count % 5 == 1:
+                        direction = prediction['direction']
+                        confidence = prediction['confidence']
+                        price_change = prediction['price_change_pct']
+                        model_count = prediction.get('model_count', 1)
+                        agreement = prediction.get('model_agreement', 0)
                         
-                        # Log prediction periodically
-                        if self.ml_prediction_count % 10 == 1:  # Every 10th prediction
-                            direction = prediction['direction']
-                            confidence = prediction['confidence']
-                            price_change = prediction['price_change_pct']
-                            
-                            print(f"🔮 ML Prediction #{self.ml_prediction_count}: {direction.upper()} "
-                                  f"({price_change:+.2f}%, confidence: {confidence:.2f})")
-                    
-                    # Check if models need retraining
-                    if self.ml_integration.should_retrain() and len(df) >= 500:
-                        print("🤖 ML models need retraining - starting background process...")
-                        threading.Thread(target=self._retrain_ml_models, args=(df,), daemon=True).start()
-                else:
-                    print(f"⚠️ Need more data for ML predictions ({len(df)}/100 transactions)")
+                        print(f"🎯 Enhanced ML #{self.ml_prediction_count}: {direction.upper()} "
+                              f"({price_change:+.2f}%, conf: {confidence:.2f}, "
+                              f"{model_count} models, agree: {agreement:.2f})")
+                
+                # Check for retraining
+                if self.ml_integration.should_retrain() and len(df) >= 200:
+                    print("🔄 Starting enhanced model retraining...")
+                    threading.Thread(
+                        target=self._retrain_enhanced_models, 
+                        args=(df,), 
+                        daemon=True
+                    ).start()
+            else:
+                available = data_result['count'] if data_result else 0
+                print(f"⚠️ Need more data for enhanced ML ({available}/100 transactions)")
         
         except Exception as e:
-            print(f"⚠️ ML prediction error: {e}")
-
-    def _retrain_ml_models(self, df):
-        """Retrain ML models in background"""
+            print(f"⚠️ Enhanced ML prediction error: {e}")
+    
+    def _retrain_enhanced_models(self, df):
+        """Enhanced model retraining with ensemble"""
         try:
-            print("🔄 Retraining ML models (background process)...")
-            results = self.ml_integration.train_all_models(df)
+            print("🔄 Retraining enhanced ensemble models...")
+            results = self.ml_integration.train_models(df)
             
-            successful_models = [name for name, result in results.items() 
-                               if result.get('success')]
-            
-            if successful_models:
-                print(f"✅ ML retraining complete. Successful models: {successful_models}")
+            if results.get('success'):
+                successful_models = results.get('successful_models', [])
+                print(f"✅ Enhanced retraining complete! Models: {successful_models}")
                 
-                # Log performance metrics
+                # Log detailed performance
                 performance = self.ml_integration.get_model_performance()
                 for model_name in successful_models:
                     if model_name in performance:
                         metrics = performance[model_name]
                         accuracy = metrics.get('accuracy', 0)
                         r2 = metrics.get('r2', 0)
-                        print(f"   • {model_name}: Accuracy {accuracy:.1f}%, R² {r2:.3f}")
+                        weight = metrics.get('ensemble_weight', 0)
+                        print(f"   • {model_name}: Acc {accuracy:.1f}%, R² {r2:.3f}, Weight {weight:.2f}")
+                
+                self.last_ml_training = datetime.now()
             else:
-                print("⚠️ ML retraining failed for all models")
+                print(f"⚠️ Enhanced retraining failed: {results.get('error')}")
         
         except Exception as e:
-            print(f"❌ ML retraining error: {e}")
-
-    def should_execute_trade(self) -> bool:
-        """Określ czy wykonać transakcję na podstawie sygnałów rynkowych i ML"""
-        if not self.latest_market_data:
-            return True  # Fallback - wykonuj jak wcześniej
+            print(f"❌ Enhanced retraining error: {e}")
+    
+    def calculate_adaptive_parameters(self) -> Dict:
+        """Calculate adaptive trading parameters based on ML confidence and market conditions"""
+        base_cycle_size = settings.get("trades_per_cycle", 50)
+        base_delay = settings.get("cycle_delay_seconds", 30)
         
-        # Analizuj sygnały rynkowe
+        # ML confidence factor
+        confidence_factor = 1.0
+        if self.ml_predictions and settings.get("adaptive_trading", True):
+            confidence = self.current_confidence
+            
+            if confidence > 0.7:
+                confidence_factor = settings.get("high_confidence_multiplier", 1.5)
+            elif confidence < 0.3:
+                confidence_factor = settings.get("low_confidence_multiplier", 0.7)
+        
+        # Market volatility factor
+        volatility_factor = 1.0
+        vol_threshold = settings.get("market_volatility_threshold", 0.05)
+        if self.market_volatility > vol_threshold:
+            volatility_factor = 0.8  # Reduce trading in high volatility
+        
+        # Recent performance factor
+        performance_factor = 1.0
+        if len(self.cycle_performance) >= 3:
+            recent_performance = sum(self.cycle_performance[-3:]) / 3
+            if recent_performance < 0.4:  # Poor recent performance
+                performance_factor = 0.9
+            elif recent_performance > 0.6:  # Good recent performance
+                performance_factor = 1.1
+        
+        # Calculate final parameters
+        final_factor = confidence_factor * volatility_factor * performance_factor
+        
+        self.adaptive_cycle_size = max(20, min(80, int(base_cycle_size * final_factor)))
+        self.adaptive_delay = max(15, min(60, int(base_delay / final_factor)))
+        
+        return {
+            'cycle_size': self.adaptive_cycle_size,
+            'delay': self.adaptive_delay,
+            'confidence_factor': confidence_factor,
+            'volatility_factor': volatility_factor,
+            'performance_factor': performance_factor,
+            'final_factor': final_factor
+        }
+    
+    def should_execute_trade_enhanced(self) -> bool:
+        """Enhanced trading decision with ML integration"""
+        if not self.latest_market_data:
+            return True  # Fallback
+        
+        # Base market signals
         signals = self.trading_signals.analyze_market_conditions(self.latest_market_data)
         base_confidence = signals.get('confidence', 0.5)
         
-        # Enhance decision with ML predictions if available
+        # Enhanced ML integration
         enhanced_confidence = base_confidence
+        ml_factor = 1.0
         
-        if self.ml_integration and self.ml_predictions and 'confidence' in self.ml_predictions:
+        if self.ml_integration and self.ml_predictions and settings.get("ml_enabled", True):
             try:
-                ml_confidence = self.ml_predictions['confidence']
+                ml_confidence = self.ml_predictions.get('confidence', 0.5)
                 ml_direction = self.ml_predictions.get('direction', 'neutral')
+                model_agreement = self.ml_predictions.get('model_agreement', 0.5)
                 
-                # Combine traditional signals with ML predictions
-                if ml_confidence > 0.7:  # High ML confidence
+                # Strong ML signals
+                if ml_confidence > 0.7 and model_agreement > 0.8:
                     if ml_direction == 'up':
-                        enhanced_confidence = min(base_confidence + 0.3, 1.0)
+                        enhanced_confidence = min(base_confidence + 0.4, 1.0)
+                        ml_factor = 1.3
                     else:
-                        enhanced_confidence = max(base_confidence - 0.2, 0.0)
-                else:
-                    enhanced_confidence = base_confidence
+                        enhanced_confidence = max(base_confidence - 0.2, 0.1)
+                        ml_factor = 0.8
                 
-                # Log enhanced decision making
+                # Moderate ML signals
+                elif ml_confidence > 0.5:
+                    if ml_direction == 'up':
+                        enhanced_confidence = min(base_confidence + 0.2, 0.9)
+                        ml_factor = 1.1
+                    else:
+                        enhanced_confidence = max(base_confidence - 0.1, 0.2)
+                        ml_factor = 0.9
+                
+                # Log ML enhancement
                 if abs(enhanced_confidence - base_confidence) > 0.1:
-                    print(f"🧠 ML Enhanced Decision: {base_confidence:.2f} → {enhanced_confidence:.2f} "
-                          f"(ML: {ml_direction}, {ml_confidence:.2f})")
+                    print(f"🧠 ML Enhanced: {base_confidence:.2f} → {enhanced_confidence:.2f} "
+                          f"(ML: {ml_direction}, {ml_confidence:.2f}, agree: {model_agreement:.2f})")
+            
             except Exception as e:
                 print(f"⚠️ ML decision enhancement error: {e}")
-                enhanced_confidence = base_confidence
         
-        # Decision logic
-        if enhanced_confidence > 0.4:
+        # Market volatility check
+        vol_threshold = settings.get("market_volatility_threshold", 0.05)
+        if self.market_volatility > vol_threshold:
+            enhanced_confidence *= 0.8
+        
+        # Final decision with confidence threshold
+        ml_threshold = settings.get("ml_confidence_threshold", 0.3)
+        
+        if enhanced_confidence > 0.6:
             return True
-        else:
-            # Reduced randomness when confidence is low
+        elif enhanced_confidence > ml_threshold:
+            # Probabilistic execution based on confidence
             import random
-            return random.random() < 0.6
-    
-    def execute_trade_cycle(self):
-        """Wykonaj cykl 30 transakcji z ML predictions"""
-        print(f"\n🔄 Cykl - wykonuję 30 transakcji...")
-    
-        # ZMIANA: Sprawdzaj ML predictions częściej i z debugowaniem
-        if self.ml_integration:
-            print(f"🔍 DEBUG: Checking ML predictions. Current trades: {self.state['count']}", flush=True)
-        
-            # Sprawdź czy plik memory.csv istnieje
-            if os.path.exists(MEMORY_FILE):
-                try:
-                    df = pd.read_csv(MEMORY_FILE)
-                    print(f"📊 DEBUG: Memory file has {len(df)} rows", flush=True)
-                    print(f"📋 DEBUG: Available columns: {list(df.columns)}", flush=True)
-                
-                    # ZAWSZE próbuj aktualizować ML jeśli mamy 100+ transakcji
-                    if len(df) >= 100:
-                        print("🤖 Forcing ML predictions update...", flush=True)
-                        self.update_ml_predictions()
-                    else:
-                        print(f"⚠️ Need more data: {len(df)}/100 transactions in memory.csv", flush=True)
-                    
-                except Exception as e:
-                    print(f"❌ Error reading memory.csv: {e}", flush=True)
-            else:
-                print(f"❌ Memory file not found: {MEMORY_FILE}", flush=True)
+            return random.random() < (enhanced_confidence * ml_factor)
         else:
-            print("⚠️ ML integration not available", flush=True)
+            return random.random() < 0.4  # Low probability fallback
+    
+    def execute_enhanced_trade_cycle(self):
+        """Enhanced trading cycle with adaptive parameters"""
+        # Calculate adaptive parameters
+        adaptive_params = self.calculate_adaptive_parameters()
+        cycle_size = adaptive_params['cycle_size']
+        
+        print(f"\n🚀 Enhanced Cycle - {cycle_size} trades (adaptive)")
+        print(f"   • ML Confidence: {self.current_confidence:.2f}")
+        print(f"   • Market Volatility: {self.market_volatility:.4f}")
+        print(f"   • Confidence Factor: {adaptive_params['confidence_factor']:.2f}")
+        print(f"   • Final Factor: {adaptive_params['final_factor']:.2f}")
+        
+        # Update ML predictions
+        if self.ml_integration:
+            self.update_ml_predictions()
         
         executed_in_cycle = 0
+        profitable_in_cycle = 0
         
-        for i in range(30):
+        for i in range(cycle_size):
             try:
-                print(f"🔹 Transakcja {self.state['count'] + 1} (#{i+1}/30)")
+                print(f"🔹 Transaction {self.state['count'] + 1} (#{i+1}/{cycle_size})")
                 
-                # Sprawdź czy wykonać transakcję (with ML enhancement)
-                if self.should_execute_trade():
-                    # Wykonaj transakcję z aktualnymi danymi rynkowymi
-                    self.trade_executor.execute_trade(settings, self.latest_market_data)
-                    self.state["count"] += 1
-                    executed_in_cycle += 1
+                # Enhanced trading decision
+                if self.should_execute_trade_enhanced():
+                    # Execute trade with current market data
+                    trade_result = self.trade_executor.execute_trade(settings, self.latest_market_data)
+                    
+                    if trade_result and hasattr(trade_result, 'profitable'):
+                        executed_in_cycle += 1
+                        if trade_result.profitable:
+                            profitable_in_cycle += 1
+                        
+                        self.state["count"] += 1
                 else:
-                    print("⏸️ Pominięto transakcję - niekorzystne warunki rynkowe")
+                    print("⏸️ Trade skipped - unfavorable conditions")
                 
-                # Sprawdź status co 10 transakcji
+                # Status check every 10 trades
                 if (i + 1) % 10 == 0:
-                    self.check_file_status()
+                    self.check_enhanced_status()
                 
-                # Przerwa między transakcjami
-                time.sleep(0.25)
+                # Adaptive delay between trades
+                time.sleep(0.2)
                 
             except Exception as e:
-                print(f"❌ Błąd podczas transakcji: {e}")
+                print(f"❌ Trade execution error: {e}")
                 continue
         
-        print(f"✅ Cykl zakończony: {executed_in_cycle}/30 transakcji wykonanych")
+        # Calculate cycle performance
+        cycle_win_rate = (profitable_in_cycle / executed_in_cycle) if executed_in_cycle > 0 else 0.5
+        self.cycle_performance.append(cycle_win_rate)
+        
+        # Keep only last 10 cycles
+        if len(self.cycle_performance) > 10:
+            self.cycle_performance = self.cycle_performance[-10:]
+        
+        self.recent_win_rate = sum(self.cycle_performance) / len(self.cycle_performance)
+        
+        print(f"✅ Enhanced cycle complete: {executed_in_cycle}/{cycle_size} executed, "
+              f"{profitable_in_cycle} profitable ({cycle_win_rate:.1%} cycle win rate)")
     
-    def check_file_status(self):
-        """Sprawdź status plików z szczegółowym debugowaniem"""
-        if os.path.exists(MEMORY_FILE):
-            size = os.stat(MEMORY_FILE).st_size
+    def check_enhanced_status(self):
+        """Enhanced status checking with ML insights"""
+        # Get database status
+        db_status = self.trade_executor.get_database_status()
+        
+        print(f"📊 Enhanced Status:")
+        print(f"   • PostgreSQL: {db_status['postgresql_count']} transactions")
+        print(f"   • CSV Backup: {db_status['csv_count']} transactions")
+        print(f"   • Recent Win Rate: {self.recent_win_rate:.1%}")
+        
+        if self.latest_market_data:
+            price = self.latest_market_data.get('price', 0)
+            rsi = self.latest_market_data.get('rsi', 0)
+            print(f"   • Current SOL Price: ${price:.4f}")
+            print(f"   • RSI: {rsi:.1f}")
+        
+        # ML Status
+        if self.ml_integration and self.ml_predictions:
             try:
-                df = pd.read_csv(MEMORY_FILE)
-                lines = len(df)
+                performance = self.ml_integration.get_model_performance()
+                active_models = len(performance)
                 
-                print(f"📁 {MEMORY_FILE}: {size:,} bajtów, {lines:,} wierszy", flush=True)
+                print(f"   • ML Models Active: {active_models}")
+                print(f"   • ML Predictions: {self.ml_prediction_count}")
                 
-                # Pokaż ostatnie 5 transakcji
-                if len(df) > 0:
-                    print(f"📊 Ostatnie 5 transakcji:", flush=True)
-                    # Wybierz najważniejsze kolumny do wyświetlenia
-                    display_cols = []
-                    available_cols = df.columns.tolist()
-                    
-                    # Sprawdź które kolumny są dostępne i dodaj je do wyświetlania
-                    priority_cols = ['timestamp', 'price', 'action', 'pnl', 'volume', 'rsi', 'sma_20']
-                    for col in priority_cols:
-                        if col in available_cols:
-                            display_cols.append(col)
-                    
-                    # Jeśli nie ma priorytetowych kolumn, weź pierwsze 5
-                    if not display_cols:
-                        display_cols = available_cols[:min(5, len(available_cols))]
-                    
-                    try:
-                        print(df[display_cols].tail(5).to_string(index=False), flush=True)
-                    except Exception as e:
-                        print(f"   Błąd wyświetlania kolumn {display_cols}: {e}", flush=True)
-                        print(df.tail(5).to_string(index=False), flush=True)
-                    
-                    # Statystyki finansowe
-                    if 'pnl' in df.columns:
-                        total_pnl = df['pnl'].sum()
-                        avg_pnl = df['pnl'].mean()
-                        max_profit = df['pnl'].max()
-                        max_loss = df['pnl'].min()
-                        winning_trades = len(df[df['pnl'] > 0])
-                        losing_trades = len(df[df['pnl'] < 0])
-                        win_rate = (winning_trades / len(df)) * 100 if len(df) > 0 else 0
-                        
-                        print(f"💰 PnL Summary:", flush=True)
-                        print(f"   • Total PnL: ${total_pnl:.6f}", flush=True)
-                        print(f"   • Average PnL/trade: ${avg_pnl:.6f}", flush=True)
-                        print(f"   • Best trade: ${max_profit:.6f}", flush=True)
-                        print(f"   • Worst trade: ${max_loss:.6f}", flush=True)
-                        print(f"   • Win rate: {win_rate:.1f}% ({winning_trades}W/{losing_trades}L)", flush=True)
-                    
-                    # Informacje o cenach
-                    if 'price' in df.columns:
-                        current_price = df['price'].iloc[-1]
-                        price_change = df['price'].iloc[-1] - df['price'].iloc[-min(10, len(df))]
-                        price_change_pct = (price_change / df['price'].iloc[-min(10, len(df))]) * 100
-                        
-                        print(f"📈 Price Analysis (last 10 trades):", flush=True)
-                        print(f"   • Current price: ${current_price:.4f}", flush=True)
-                        print(f"   • Price change: ${price_change:+.4f} ({price_change_pct:+.2f}%)", flush=True)
-                    
-                    # Dostępne kolumny
-                    print(f"📋 Available columns: {', '.join(available_cols)}", flush=True)
-                else:
-                    print("⚠️ Plik memory.csv jest pusty", flush=True)
+                if self.ml_predictions:
+                    direction = self.ml_predictions.get('direction', 'unknown')
+                    confidence = self.ml_predictions.get('confidence', 0)
+                    predicted_price = self.ml_predictions.get('predicted_price', 0)
+                    print(f"   • ML Forecast: {direction.upper()} → ${predicted_price:.4f} ({confidence:.2f})")
                     
             except Exception as e:
-                print(f"❌ Błąd czytania {MEMORY_FILE}: {e}", flush=True)
-                # Fallback do prostego sprawdzenia
-                try:
-                    with open(MEMORY_FILE, "r") as f:
-                        lines = sum(1 for _ in f)
-                    print(f"📁 {MEMORY_FILE}: {size:,} bajtów, {lines:,} linii (fallback)", flush=True)
-                except Exception as e2:
-                    print(f"📁 {MEMORY_FILE}: {size:,} bajtów (błąd liczenia linii: {e2})", flush=True)
-        else:
-            print(f"❌ Plik {MEMORY_FILE} nie istnieje", flush=True)
+                print(f"   • ML Status Error: {e}")
     
     def load_state(self):
-        """Załaduj stan aplikacji"""
+        """Load application state"""
         try:
             if os.path.exists(STATE_FILE):
                 with open(STATE_FILE, "r") as f:
                     self.state = json.load(f)
                     if "count" not in self.state:
                         self.state["count"] = 0
-                print(f"📂 Załadowano stan: {self.state['count']} transakcji")
+                print(f"📂 State loaded: {self.state['count']} transactions")
             else:
-                print("📝 Tworzę nowy plik stanu")
                 self.state = {"count": 0}
         except Exception as e:
-            print(f"⚠️ Błąd wczytywania stanu: {e}")
+            print(f"⚠️ State loading error: {e}")
             self.state = {"count": 0}
     
     def save_state(self):
-        """Zapisz stan aplikacji"""
+        """Save application state"""
         try:
             os.makedirs("data", exist_ok=True)
             with open(STATE_FILE, "w") as f:
                 json.dump(self.state, f)
             return True
         except Exception as e:
-            print(f"❌ Błąd zapisu stanu: {e}")
+            print(f"❌ State saving error: {e}")
             return False
     
-    def get_system_status(self):
-        """Get comprehensive system status"""
-        status = {
-            'total_trades': self.state["count"],
-            'market_connected': self.market_service is not None,
-            'latest_price': self.latest_market_data.get('price', 0) if self.latest_market_data else 0,
-            'ml_available': ML_AVAILABLE and self.ml_integration is not None,
-            'ml_predictions_count': self.ml_prediction_count
-        }
-        
-        if ML_AVAILABLE and self.ml_integration:
-            try:
-                performance = self.ml_integration.get_model_performance()
-                status['ml_models'] = list(performance.keys())
-                status['ml_last_training'] = self.last_ml_training
-            except Exception as e:
-                print(f"⚠️ Error getting ML performance: {e}")
-                status['ml_models'] = []
-        
-        return status
-    
-    def debug_ml_status(self):
-        """Debug ML system status z pełnymi szczegółami"""
-        print("\n🔍 ML DEBUG STATUS:", flush=True)
-        print(f"   • ML_AVAILABLE: {ML_AVAILABLE}", flush=True)
-        print(f"   • ml_integration: {self.ml_integration is not None}", flush=True)
-        print(f"   • Memory file exists: {os.path.exists(MEMORY_FILE)}", flush=True)
-        
-        if os.path.exists(MEMORY_FILE):
-            try:
-                df = pd.read_csv(MEMORY_FILE)
-                print(f"   • Memory file rows: {len(df)}", flush=True)
-                print(f"   • Memory file columns: {list(df.columns)}", flush=True)
-                
-                if len(df) > 0:
-                    print(f"   • Date range: {df.iloc[0].get('timestamp', 'N/A')} → {df.iloc[-1].get('timestamp', 'N/A')}", flush=True)
-                    
-                    # Sprawdź jakość danych dla ML
-                    required_ml_cols = ['price', 'volume', 'rsi']
-                    missing_cols = [col for col in required_ml_cols if col not in df.columns]
-                    if missing_cols:
-                        print(f"   ⚠️ Missing ML columns: {missing_cols}", flush=True)
-                    else:
-                        print(f"   ✅ All required ML columns present", flush=True)
-                    
-                    # Sprawdź czy są puste wartości
-                    null_counts = df.isnull().sum()
-                    if null_counts.sum() > 0:
-                        print(f"   ⚠️ Null values found: {dict(null_counts[null_counts > 0])}", flush=True)
-                    else:
-                        print(f"   ✅ No null values in data", flush=True)
-                
-                print(f"   • Last 3 rows preview:", flush=True)
-                print(df.tail(3).to_string(index=False), flush=True)
-                
-            except Exception as e:
-                print(f"   • Error reading memory: {e}", flush=True)
-        
-        if self.ml_integration:
-            try:
-                models = self.ml_integration.get_model_performance()
-                print(f"   • Available models: {list(models.keys())}", flush=True)
-                
-                # Szczegóły o modelach
-                for model_name, performance in models.items():
-                    accuracy = performance.get('accuracy', 0)
-                    r2 = performance.get('r2', 0)
-                    print(f"     - {model_name}: Accuracy {accuracy:.1f}%, R² {r2:.3f}", flush=True)
-                    
-            except Exception as e:
-                print(f"   • Error getting models: {e}", flush=True)
-        
-        # Sprawdź ML predictions
-        if self.ml_predictions:
-            print(f"   • Current ML predictions:", flush=True)
-            for key, value in self.ml_predictions.items():
-                print(f"     - {key}: {value}", flush=True)
-            print(f"   • Total predictions made: {self.ml_prediction_count}", flush=True)
-        else:
-            print(f"   • No ML predictions yet", flush=True)
-        
-        # Sprawdź czy katalogi ML istnieją
-        ml_dirs = ['ml', 'ml/models', 'data']
-        for dir_path in ml_dirs:
-            exists = os.path.exists(dir_path)
-            print(f"   • Directory {dir_path}: {'✅' if exists else '❌'}", flush=True)
-        
-        print("", flush=True)  # Dodatkowa linia dla czytelności
-    
     def start(self):
-        """Uruchom bota tradingowego"""
-        print("🚀 Uruchamiam Enhanced DexBot Worker z Real-time Market Data i ML...")
+        """Start enhanced trading bot"""
+        print("🚀 Starting OPTIMIZED DexBot with Enhanced ML & Adaptive Trading...")
         print(f"⏰ Start: {datetime.now()}")
+        print(f"🎯 Settings: {settings['trades_per_cycle']} trades/{settings['cycle_delay_seconds']}s, ML: {settings.get('ml_enabled', True)}")
         
-        # Utwórz katalogi
+        # Setup directories
         os.makedirs("data", exist_ok=True)
         os.makedirs("data/results", exist_ok=True)
         if ML_AVAILABLE:
             os.makedirs("ml", exist_ok=True)
             os.makedirs("ml/models", exist_ok=True)
         
-        # Załaduj stan
+        # Load state
         self.load_state()
         start_count = self.state["count"]
         
-        # Debug ML status na początku
-        self.debug_ml_status()
-        
-        # Initial ML setup if available
-        if ML_AVAILABLE and self.ml_integration and start_count > 500:
-            print("🤖 Checking for existing ML models...")
-            # Could add logic to load existing models here
-            
-        # Uruchom market data service
-        print("🌐 Łączę z Binance WebSocket...")
+        # Start market data service
+        print("🌐 Connecting to enhanced market data...")
         self.market_service = create_market_data_service(self.on_market_data_update)
         
         if not self.market_service:
-            print("⚠️ Nie udało się połączyć z market data - kontynuuję w trybie symulacji")
+            print("⚠️ Market data connection failed - continuing in simulation mode")
         else:
-            print("✅ Połączony z Binance - używam real-time data")
-            time.sleep(5)  # Daj czas na pierwsze dane
+            print("✅ Connected to live market data")
+            time.sleep(3)  # Initial data load
         
-        # Initial ML prediction update if enough data
+        # Initial ML setup
         if ML_AVAILABLE and self.ml_integration and start_count >= 100:
-            print("🤖 Generating initial ML predictions...")
+            print("🤖 Initializing enhanced ML predictions...")
             self.update_ml_predictions()
         
-        # DODATKOWE: Wymuszenie ML update jeśli mamy dużo danych
-        if ML_AVAILABLE and self.ml_integration:
-            print("🤖 FORCING initial ML predictions check...")
-            self.update_ml_predictions()
+        print(f"🎯 Starting from transaction #{start_count + 1}")
         
-        print(f"🎯 Rozpoczynam od transakcji #{start_count + 1}")
-        
-        # Główna pętla
+        # Main enhanced trading loop
         cycle = 0
         try:
             while True:
                 cycle += 1
                 
-                # Wykonaj cykl transakcji
-                self.execute_trade_cycle()
+                # Execute enhanced trading cycle
+                self.execute_enhanced_trade_cycle()
                 
-                # Zapisz stan
+                # Save state
                 if self.save_state():
-                    print(f"💾 Stan zapisany: {self.state['count']} transakcji")
+                    print(f"💾 State saved: {self.state['count']} transactions")
                 
-                # Status podsumowujący
+                # Enhanced session stats
                 total_executed = self.state["count"] - start_count
-                print(f"\n📈 Statystyki sesji:", flush=True)
-                print(f"   • Łącznie wykonano: {total_executed} nowych transakcji", flush=True)
-                print(f"   • Całkowita liczba: {self.state['count']:,} transakcji", flush=True)
-                print(f"   • Cykli ukończonych: {cycle}", flush=True)
+                print(f"\n📈 Enhanced Session Stats:")
+                print(f"   • New transactions: {total_executed}")
+                print(f"   • Total transactions: {self.state['count']:,}")
+                print(f"   • Cycles completed: {cycle}")
+                print(f"   • Recent win rate: {self.recent_win_rate:.1%}")
+                print(f"   • Adaptive cycle size: {self.adaptive_cycle_size}")
                 
                 if self.latest_market_data:
                     price = self.latest_market_data.get('price', 0)
-                    rsi = self.latest_market_data.get('rsi', 0)
-                    print(f"   • Aktualna cena SOL: ${price:.4f}", flush=True)
-                    print(f"   • RSI: {rsi:.1f}", flush=True)
+                    print(f"   • Current SOL price: ${price:.4f}")
                 
-                # ML status info
-                if ML_AVAILABLE and self.ml_integration and self.ml_predictions:
+                # Enhanced ML status
+                if self.ml_predictions:
                     try:
-                        ml_direction = self.ml_predictions.get('direction', 'unknown')
-                        ml_confidence = self.ml_predictions.get('confidence', 0)
+                        direction = self.ml_predictions.get('direction', 'unknown')
+                        confidence = self.ml_predictions.get('confidence', 0)
                         predicted_price = self.ml_predictions.get('predicted_price', 0)
-                        print(f"   • ML Prediction: {ml_direction.upper()} → ${predicted_price:.4f} ({ml_confidence:.2f})", flush=True)
+                        model_count = self.ml_predictions.get('model_count', 0)
+                        print(f"   • ML Ensemble: {direction.upper()} → ${predicted_price:.4f}")
+                        print(f"   • ML Confidence: {confidence:.2f} ({model_count} models)")
                     except Exception as e:
-                        print(f"   • ML Status: Error displaying prediction ({e})", flush=True)
+                        print(f"   • ML Display Error: {e}")
                 
-                # System status every 10 cycles
-                if cycle % 10 == 0:
-                    try:
-                        status = self.get_system_status()
-                        print(f"\n🔍 System Status (Cycle {cycle}):", flush=True)
-                        print(f"   • Market Data: {'✅ Connected' if status['market_connected'] else '❌ Disconnected'}", flush=True)
-                        if status['ml_available']:
-                            print(f"   • ML Models: {len(status.get('ml_models', []))} active", flush=True)
-                            print(f"   • ML Predictions: {status['ml_predictions_count']} generated", flush=True)
-                        else:
-                            print(f"   • ML Status: ❌ Not available", flush=True)
-                    except Exception as e:
-                        print(f"   • Status Error: {e}", flush=True)
-                
-                # Przerwa między cyklami
-                print("⏳ Przerwa 60 sekund przed kolejnym cyklem...", flush=True)
-                time.sleep(60)
+                # Adaptive delay between cycles
+                print(f"⏳ Enhanced break: {self.adaptive_delay}s before next cycle...")
+                time.sleep(self.adaptive_delay)
                 
         except KeyboardInterrupt:
-            print("\n🛑 Zatrzymano przez użytkownika", flush=True)
+            print("\n🛑 Optimized bot stopped by user")
         except Exception as e:
-            print(f"\n💥 Nieoczekiwany błąd: {e}", flush=True)
+            print(f"\n💥 Unexpected error: {e}")
             import traceback
             traceback.print_exc()
         finally:
-            # Zamknij market data service
+            # Cleanup
             if self.market_service:
                 self.market_service.stop_stream()
             
-            # Zapisz stan na koniec
             if self.save_state():
-                print(f"💾 Końcowy zapis stanu: {self.state['count']} transakcji", flush=True)
+                print(f"💾 Final state saved: {self.state['count']} transactions")
             
-            # Final system status
+            # Final enhanced status
             try:
-                final_status = self.get_system_status()
-                print(f"\n🏁 Worker zakończony:", flush=True)
-                print(f"   • Łączna liczba transakcji: {final_status['total_trades']:,}", flush=True)
-                if final_status['ml_available']:
-                    print(f"   • ML predictions wygenerowanych: {final_status['ml_predictions_count']}", flush=True)
-                print(f"   • Ostatnia cena SOL: ${final_status['latest_price']:.4f}", flush=True)
+                print(f"\n🏁 Enhanced Bot Session Complete:")
+                print(f"   • Total transactions: {self.state['count']:,}")
+                print(f"   • Recent win rate: {self.recent_win_rate:.1%}")
+                print(f"   • ML predictions generated: {self.ml_prediction_count}")
                 
-                # Final file status check
-                print(f"\n📁 Final File Status:", flush=True)
-                self.check_file_status()
+                if self.latest_market_data:
+                    final_price = self.latest_market_data.get('price', 0)
+                    print(f"   • Final SOL price: ${final_price:.4f}")
                 
             except Exception as e:
-                print(f"🏁 Worker zakończony (status error: {e})", flush=True)
+                print(f"🏁 Session complete (status error: {e})")
 
 if __name__ == "__main__":
-    bot = TradingBot()
+    bot = OptimizedTradingBot()
     bot.start()
