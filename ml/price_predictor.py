@@ -50,20 +50,33 @@ class PricePredictionModel:
             # Sort by timestamp
             df = df.sort_values('timestamp').copy()
             
-            # Price features
-            df['price_change'] = df['amount_out'].pct_change()
-            df['price_ma_5'] = df['amount_out'].rolling(5).mean()
-            df['price_ma_15'] = df['amount_out'].rolling(15).mean()
-            df['price_ma_30'] = df['amount_out'].rolling(30).mean()
+            # Price features - POPRAWIONE: Użyj kolumny 'price' jeśli dostępna
+            price_col = 'price' if 'price' in df.columns else 'amount_out'
+            
+            df['price_change'] = df[price_col].pct_change()
+            df['price_ma_5'] = df[price_col].rolling(5).mean()
+            df['price_ma_15'] = df[price_col].rolling(15).mean()
+            df['price_ma_30'] = df[price_col].rolling(30).mean()
             
             # Volatility features
-            df['volatility_5'] = df['amount_out'].rolling(5).std()
-            df['volatility_15'] = df['amount_out'].rolling(15).std()
+            df['volatility_5'] = df[price_col].rolling(5).std()
+            df['volatility_15'] = df[price_col].rolling(15).std()
             
             # Technical indicators
-            df['rsi'] = self._calculate_rsi(df['amount_out'])
-            df['macd'], df['macd_signal'] = self._calculate_macd(df['amount_out'])
-            df['bb_upper'], df['bb_lower'] = self._calculate_bollinger_bands(df['amount_out'])
+            df['rsi_calc'] = self._calculate_rsi(df[price_col])
+            df['macd'], df['macd_signal'] = self._calculate_macd(df[price_col])
+            df['bb_upper'], df['bb_lower'] = self._calculate_bollinger_bands(df[price_col])
+            
+            # Use existing RSI if available, otherwise use calculated
+            if 'rsi' in df.columns:
+                df['rsi_final'] = df['rsi'].fillna(df['rsi_calc'])
+            else:
+                df['rsi_final'] = df['rsi_calc']
+            
+            # Volume features
+            if 'volume' in df.columns:
+                df['volume_ma'] = df['volume'].rolling(10).mean()
+                df['volume_std'] = df['volume'].rolling(10).std()
             
             # Time-based features
             df['hour'] = pd.to_datetime(df['timestamp']).dt.hour
@@ -76,7 +89,7 @@ class PricePredictionModel:
                 df['impact_std'] = df['price_impact'].rolling(10).std()
             
             # Target variable (next price)
-            df['target'] = df['amount_out'].shift(-1)
+            df['target'] = df[price_col].shift(-1)
             
             # Drop NaN values
             df = df.dropna()
@@ -157,8 +170,8 @@ class PricePredictionModel:
             # Prepare features
             df_features = self.prepare_features(df)
             
-            if len(df_features) < 100:
-                print("⚠️ Insufficient data for training (need at least 100 samples)")
+            if len(df_features) < 50:
+                print("⚠️ Insufficient data for training (need at least 50 samples)")
                 return {'success': False, 'error': 'Insufficient data'}
             
             # Feature columns (exclude timestamp, target, and non-numeric columns)
@@ -324,6 +337,60 @@ class PricePredictionModel:
             print(f"❌ Random Forest training error: {e}")
             return {'success': False, 'error': str(e)}
     
+    def _train_gb_model(self, X_train, X_test, y_train, y_test) -> Dict:
+        """Train Gradient Boosting model"""
+        try:
+            # Scale features
+            X_train_scaled = self.feature_scaler.fit_transform(X_train)
+            X_test_scaled = self.feature_scaler.transform(X_test)
+            
+            # Create model
+            self.model = GradientBoostingRegressor(
+                n_estimators=100,
+                max_depth=6,
+                learning_rate=0.1,
+                random_state=42
+            )
+            
+            # Train model
+            self.model.fit(X_train_scaled, y_train)
+            
+            # Predictions
+            predictions = self.model.predict(X_test_scaled)
+            
+            # Calculate metrics
+            mse = mean_squared_error(y_test, predictions)
+            mae = mean_absolute_error(y_test, predictions)
+            r2 = r2_score(y_test, predictions)
+            
+            # Direction accuracy
+            actual_direction = np.sign(np.diff(y_test))
+            pred_direction = np.sign(np.diff(predictions))
+            accuracy = np.mean(actual_direction == pred_direction) * 100
+            
+            self.metrics.update({
+                'mse': mse,
+                'mae': mae,
+                'r2': r2,
+                'accuracy': accuracy,
+                'last_trained': datetime.now(),
+                'training_samples': len(X_train)
+            })
+            
+            self.is_trained = True
+            
+            print(f"✅ Gradient Boosting model trained successfully!")
+            print(f"   • MSE: {mse:.6f}")
+            print(f"   • MAE: {mae:.6f}")
+            print(f"   • R²: {r2:.4f}")
+            print(f"   • Direction Accuracy: {accuracy:.1f}%")
+            
+            return {'success': True, 'metrics': self.metrics}
+            
+        except Exception as e:
+            print(f"❌ Gradient Boosting training error: {e}")
+            return {'success': False, 'error': str(e)}
+    
     def predict_next_price(self, recent_data: pd.DataFrame) -> Dict:
         """Predict next price based on recent data"""
         try:
@@ -363,8 +430,12 @@ class PricePredictionModel:
             # Calculate confidence based on recent model performance
             confidence = max(0.1, min(0.9, self.metrics.get('r2', 0.5)))
             
-            # Direction prediction
-            current_price = recent_data['amount_out'].iloc[-1]
+            # Direction prediction - POPRAWIONE: użyj kolumny 'price' jeśli dostępna
+            if 'price' in recent_data.columns:
+                current_price = recent_data['price'].iloc[-1]
+            else:
+                current_price = recent_data['amount_out'].iloc[-1]
+                
             direction = 'up' if prediction > current_price else 'down'
             price_change_pct = ((prediction - current_price) / current_price) * 100
             
@@ -469,19 +540,48 @@ class MLTradingIntegration:
         return results
     
     def get_ensemble_prediction(self, recent_data: pd.DataFrame) -> Dict:
-        """Get ensemble prediction from multiple models"""
+        """Get ensemble prediction from multiple models with auto-training"""
+        # DODANE: Auto-training jeśli żaden model nie jest wytrenowany
+        trained_models = [name for name, model in self.models.items() if model.is_trained]
+        
+        if not trained_models and len(recent_data) >= 100:
+            print("🤖 No trained models found - starting auto-training...")
+            try:
+                # Trenuj tylko jeden model (Random Forest) dla szybkości
+                training_result = self.models['random_forest'].train_model(recent_data)
+                
+                if training_result.get('success'):
+                    print("✅ Auto-training successful!")
+                    self.models['random_forest'].save_model()
+                else:
+                    print(f"❌ Auto-training failed: {training_result.get('error', 'Unknown error')}")
+                    return {'error': f'Auto-training failed: {training_result.get("error", "Unknown error")}'}
+            except Exception as e:
+                print(f"❌ Auto-training exception: {e}")
+                return {'error': f'Auto-training exception: {str(e)}'}
+        
         predictions = []
         confidences = []
         
         for model_name, model in self.models.items():
             if model.is_trained:
-                pred = model.predict_next_price(recent_data)
-                if 'predicted_price' in pred:
-                    predictions.append(pred['predicted_price'])
-                    confidences.append(pred['confidence'])
+                try:
+                    pred = model.predict_next_price(recent_data)
+                    if 'predicted_price' in pred:
+                        predictions.append(pred['predicted_price'])
+                        confidences.append(pred['confidence'])
+                        print(f"✅ {model_name} prediction: ${pred['predicted_price']:.4f} (confidence: {pred['confidence']:.2f})")
+                    else:
+                        print(f"⚠️ {model_name} prediction failed: {pred.get('error', 'Unknown error')}")
+                except Exception as e:
+                    print(f"❌ {model_name} prediction error: {e}")
         
         if not predictions:
-            return {'error': 'No trained models available'}
+            # DODANE: Lepszy error message
+            if len(recent_data) < 100:
+                return {'error': f'Insufficient data for training (need 100+, have {len(recent_data)})'}
+            else:
+                return {'error': 'No trained models available and auto-training failed'}
         
         # Ensemble prediction (weighted average)
         weights = np.array(confidences)
@@ -490,20 +590,28 @@ class MLTradingIntegration:
         ensemble_price = np.average(predictions, weights=weights)
         ensemble_confidence = np.mean(confidences)
         
-        current_price = recent_data['amount_out'].iloc[-1]
+        # POPRAWIONE: Użyj kolumny 'price' jeśli dostępna, inaczej 'amount_out'
+        if 'price' in recent_data.columns:
+            current_price = recent_data['price'].iloc[-1]
+        else:
+            current_price = recent_data['amount_out'].iloc[-1]
+            
         direction = 'up' if ensemble_price > current_price else 'down'
         price_change_pct = ((ensemble_price - current_price) / current_price) * 100
         
-        return {
+        result = {
             'predicted_price': float(ensemble_price),
             'current_price': float(current_price),
             'price_change_pct': float(price_change_pct),
             'direction': direction,
             'confidence': float(ensemble_confidence),
             'model_count': len(predictions),
-            'individual_predictions': dict(zip(self.models.keys(), predictions)),
+            'individual_predictions': dict(zip([name for name, model in self.models.items() if model.is_trained], predictions)),
             'prediction_time': datetime.now().isoformat()
         }
+        
+        print(f"🔮 Ensemble Prediction: {direction.upper()} ${ensemble_price:.4f} (confidence: {ensemble_confidence:.2f})")
+        return result
     
     def should_retrain(self) -> bool:
         """Check if models should be retrained"""
