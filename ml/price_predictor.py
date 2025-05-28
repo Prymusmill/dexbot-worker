@@ -174,23 +174,84 @@ class PricePredictionModel:
                 print("⚠️ Insufficient data for training (need at least 50 samples)")
                 return {'success': False, 'error': 'Insufficient data'}
             
-            # Feature columns (exclude timestamp, target, and non-numeric columns)
-            feature_columns = [col for col in df_features.columns 
-                             if col not in ['timestamp', 'target', 'input_token', 'output_token', 'profitable']]
+            print(f"🔍 DataFrame info before cleaning:")
+            print(f"   Shape: {df_features.shape}")
+            print(f"   Columns: {list(df_features.columns)}")
+            print(f"   Dtypes: {dict(df_features.dtypes)}")
             
-            X = df_features[feature_columns].values
-            y = df_features['target'].values
+            # AGRESYWNE czyszczenie danych
+            feature_columns = []
+            for col in df_features.columns:
+                if col not in ['timestamp', 'target', 'input_token', 'output_token', 'profitable']:
+                    try:
+                        # Spróbuj skonwertować kolumnę na float
+                        test_series = pd.to_numeric(df_features[col], errors='coerce')
+                        if not test_series.isna().all():  # Jeśli nie wszystko to NaN
+                            feature_columns.append(col)
+                            print(f"✅ Added feature: {col} (type: {df_features[col].dtype})")
+                        else:
+                            print(f"❌ Skipped {col}: all NaN after conversion")
+                    except Exception as e:
+                        print(f"❌ Skipped {col}: conversion error - {e}")
             
-            # Handle any remaining NaN values
-            mask = ~(np.isnan(X).any(axis=1) | np.isnan(y))
-            X, y = X[mask], y[mask]
+            print(f"📊 Final feature columns: {feature_columns}")
             
-            print(f"📊 Training data: {X.shape[0]} samples, {X.shape[1]} features")
+            if not feature_columns:
+                return {'success': False, 'error': 'No convertible feature columns found'}
+            
+            # BEZPIECZNA konwersja danych
+            try:
+                # Konwertuj każdą kolumnę osobno
+                X_data = []
+                for col in feature_columns:
+                    col_data = pd.to_numeric(df_features[col], errors='coerce')
+                    X_data.append(col_data.values)
+                
+                X = np.column_stack(X_data).astype(np.float64)
+                y = pd.to_numeric(df_features['target'], errors='coerce').astype(np.float64)
+                
+                print(f"🔍 Data after conversion:")
+                print(f"   X shape: {X.shape}, dtype: {X.dtype}")
+                print(f"   y shape: {y.shape}, dtype: {y.dtype}")
+                
+            except Exception as e:
+                print(f"❌ Data conversion failed: {e}")
+                return {'success': False, 'error': f'Data conversion failed: {str(e)}'}
+            
+            # BEZPIECZNE usuwanie NaN
+            try:
+                # Użyj pandas do znajdowania validnych indeksów
+                df_temp = pd.DataFrame(X, columns=feature_columns)
+                df_temp['target'] = y
+                df_clean = df_temp.dropna()
+                
+                if len(df_clean) < 20:
+                    print(f"❌ Too few clean samples: {len(df_clean)}")
+                    return {'success': False, 'error': f'Only {len(df_clean)} clean samples (need 20+)'}
+                
+                X = df_clean[feature_columns].values.astype(np.float64)
+                y = df_clean['target'].values.astype(np.float64)
+                
+                print(f"📊 Clean data: {X.shape[0]} samples, {X.shape[1]} features")
+                
+            except Exception as e:
+                print(f"❌ Data cleaning failed: {e}")
+                return {'success': False, 'error': f'Data cleaning failed: {str(e)}'}
+            
+            # Final validation
+            if np.any(np.isinf(X)) or np.any(np.isinf(y)):
+                print("❌ Data contains infinite values")
+                return {'success': False, 'error': 'Data contains infinite values'}
             
             # Split data
-            split_idx = int(len(X) * (1 - test_size))
+            split_idx = max(1, int(len(X) * (1 - test_size)))
             X_train, X_test = X[:split_idx], X[split_idx:]
             y_train, y_test = y[:split_idx], y[split_idx:]
+            
+            print(f"📊 Training split: {len(X_train)} train, {len(X_test)} test")
+            
+            if len(X_train) < 10:
+                return {'success': False, 'error': f'Training set too small: {len(X_train)}'}
             
             if self.model_type == "lstm":
                 return self._train_lstm_model(X_train, X_test, y_train, y_test)
@@ -203,6 +264,9 @@ class PricePredictionModel:
                 
         except Exception as e:
             print(f"❌ Training error: {e}")
+            import traceback
+            print(f"📋 Full traceback:")
+            print(traceback.format_exc())
             return {'success': False, 'error': str(e)}
     
     def _train_lstm_model(self, X_train, X_test, y_train, y_test) -> Dict:
