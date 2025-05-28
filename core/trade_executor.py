@@ -150,7 +150,7 @@ class EnhancedTradeExecutor:
         ]
         
         # Nagłówki (zachowaj kompatybilność z starym formatem)
-        headers = ["timestamp", "input_token", "output_token", "amount_in", "amount_out", "price_impact"]
+        headers = ["timestamp", "input_token", "output_token", "amount_in", "amount_out", "price_impact", "price", "rsi"]
         
         with open(MEMORY_FILE, "a", newline="") as f:
             writer = csv.writer(f)
