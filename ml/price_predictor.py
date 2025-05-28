@@ -1,4 +1,4 @@
-# ml/price_predictor.py
+# ml/price_predictor.py - FIXED VERSION
 import numpy as np
 import pandas as pd
 import joblib
@@ -16,18 +16,17 @@ from tensorflow.keras import layers
 
 class PricePredictionModel:
     """
-    Advanced ML model for SOL price prediction
-    Supports multiple algorithms: LSTM, Random Forest, Gradient Boosting
+    FIXED: Enhanced ML model for SOL price prediction with better data handling
     """
     
-    def __init__(self, model_type: str = "lstm"):
+    def __init__(self, model_type: str = "random_forest"):  # Changed default to RF for stability
         self.model_type = model_type.lower()
         self.model = None
         self.scaler = MinMaxScaler()
         self.feature_scaler = StandardScaler()
         self.is_trained = False
-        self.sequence_length = 60  # 60 data points for prediction
-        self.prediction_horizon = 1  # Predict 1 step ahead
+        self.sequence_length = 30  # Reduced from 60 for smaller datasets
+        self.prediction_horizon = 1
         
         # Model performance metrics
         self.metrics = {
@@ -40,386 +39,312 @@ class PricePredictionModel:
         }
         
         self.logger = logging.getLogger(__name__)
-        
-        # Create models directory
         os.makedirs("ml/models", exist_ok=True)
         
     def prepare_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Prepare enhanced features for ML model"""
+        """FIXED: More robust feature preparation with better data handling"""
         try:
-            # Sort by timestamp
-            df = df.sort_values('timestamp').copy()
+            print(f"🔍 Starting feature preparation with {len(df)} rows")
             
-            # Price features - POPRAWIONE: Użyj kolumny 'price' jeśli dostępna
-            price_col = 'price' if 'price' in df.columns else 'amount_out'
+            # Make a copy and sort
+            df = df.copy().sort_values('timestamp')
             
-            df['price_change'] = df[price_col].pct_change()
-            df['price_ma_5'] = df[price_col].rolling(5).mean()
-            df['price_ma_15'] = df[price_col].rolling(15).mean()
-            df['price_ma_30'] = df[price_col].rolling(30).mean()
-            
-            # Volatility features
-            df['volatility_5'] = df[price_col].rolling(5).std()
-            df['volatility_15'] = df[price_col].rolling(15).std()
-            
-            # Technical indicators
-            df['rsi_calc'] = self._calculate_rsi(df[price_col])
-            df['macd'], df['macd_signal'] = self._calculate_macd(df[price_col])
-            df['bb_upper'], df['bb_lower'] = self._calculate_bollinger_bands(df[price_col])
-            
-            # Use existing RSI if available, otherwise use calculated
-            if 'rsi' in df.columns:
-                df['rsi_final'] = df['rsi'].fillna(df['rsi_calc'])
+            # FIXED: Better price column detection and creation
+            if 'price' in df.columns and df['price'].notna().sum() > len(df) * 0.5:
+                # Use price column if it has enough valid data
+                price_col = 'price'
+                print(f"✅ Using 'price' column ({df['price'].notna().sum()}/{len(df)} valid values)")
             else:
-                df['rsi_final'] = df['rsi_calc']
+                # Create price from amount_out or fallback
+                if 'amount_out' in df.columns:
+                    df['price'] = pd.to_numeric(df['amount_out'], errors='coerce')
+                    price_col = 'price'
+                    print(f"✅ Created 'price' from 'amount_out'")
+                else:
+                    print(f"❌ No suitable price column found")
+                    return pd.DataFrame()
             
-            # Volume features
-            if 'volume' in df.columns:
-                df['volume_ma'] = df['volume'].rolling(10).mean()
-                df['volume_std'] = df['volume'].rolling(10).std()
+            # FIXED: Ensure we have valid price data
+            df[price_col] = pd.to_numeric(df[price_col], errors='coerce')
+            initial_len = len(df)
+            df = df.dropna(subset=[price_col])
+            print(f"📊 After price cleaning: {len(df)}/{initial_len} rows remain")
             
-            # Time-based features
-            df['hour'] = pd.to_datetime(df['timestamp']).dt.hour
-            df['day_of_week'] = pd.to_datetime(df['timestamp']).dt.dayofweek
-            df['is_weekend'] = df['day_of_week'].isin([5, 6]).astype(int)
+            if len(df) < 20:
+                print(f"❌ Insufficient data after price cleaning: {len(df)}")
+                return pd.DataFrame()
             
-            # Market microstructure (if available)
-            if 'price_impact' in df.columns:
-                df['impact_ma'] = df['price_impact'].rolling(10).mean()
-                df['impact_std'] = df['price_impact'].rolling(10).std()
+            # FIXED: Safer feature engineering with error handling
+            try:
+                # Basic price features
+                df['price_change'] = df[price_col].pct_change().fillna(0)
+                df['price_ma_5'] = df[price_col].rolling(5, min_periods=1).mean()
+                df['price_ma_10'] = df[price_col].rolling(10, min_periods=1).mean()
+                
+                # Volatility with safer calculation
+                df['volatility_5'] = df[price_col].rolling(5, min_periods=1).std().fillna(0)
+                
+                # FIXED: Safer RSI calculation
+                if 'rsi' in df.columns:
+                    df['rsi_final'] = pd.to_numeric(df['rsi'], errors='coerce').fillna(50.0)
+                else:
+                    df['rsi_final'] = self._safe_rsi(df[price_col])
+                
+                # Volume handling
+                if 'volume' in df.columns:
+                    df['volume_clean'] = pd.to_numeric(df['volume'], errors='coerce').fillna(df['amount_in'].median())
+                else:
+                    df['volume_clean'] = pd.to_numeric(df['amount_in'], errors='coerce')
+                
+                # Time features
+                df['timestamp'] = pd.to_datetime(df['timestamp'])
+                df['hour'] = df['timestamp'].dt.hour
+                df['day_of_week'] = df['timestamp'].dt.dayofweek
+                
+                # Market microstructure
+                if 'price_impact' in df.columns:
+                    df['price_impact_clean'] = pd.to_numeric(df['price_impact'], errors='coerce').fillna(0)
+                else:
+                    df['price_impact_clean'] = 0.0
+                
+                print(f"✅ Feature engineering completed")
+                
+            except Exception as e:
+                print(f"❌ Feature engineering error: {e}")
+                return pd.DataFrame()
             
-            # Target variable (next price)
+            # FIXED: Select only numeric features for ML
+            feature_columns = [
+                'price_change', 'price_ma_5', 'price_ma_10', 'volatility_5',
+                'rsi_final', 'volume_clean', 'hour', 'day_of_week', 'price_impact_clean'
+            ]
+            
+            # Keep only existing columns
+            available_features = [col for col in feature_columns if col in df.columns]
+            print(f"📋 Available features: {available_features}")
+            
+            if len(available_features) < 3:
+                print(f"❌ Too few features available: {len(available_features)}")
+                return pd.DataFrame()
+            
+            # Create target (next price)
             df['target'] = df[price_col].shift(-1)
             
-            # Drop NaN values
-            df = df.dropna()
+            # FIXED: More conservative data cleaning
+            # Keep all rows except the last one (no target) and rows with critical missing data
+            df = df[:-1]  # Remove last row (no target)
             
-            print(f"✅ Features prepared: {len(df)} samples, {df.shape[1]} features")
-            return df
+            # Only remove rows where ALL features are NaN
+            feature_data = df[available_features]
+            valid_rows = feature_data.notna().sum(axis=1) >= len(available_features) * 0.5  # At least 50% features valid
+            df = df[valid_rows]
+            
+            # Fill remaining NaN with column medians
+            for col in available_features:
+                if col in df.columns:
+                    df[col] = df[col].fillna(df[col].median())
+            
+            df['target'] = df['target'].fillna(method='ffill')  # Forward fill target
+            final_clean = df.dropna(subset=['target'])
+            
+            print(f"📊 Final clean data: {len(final_clean)} samples with {len(available_features)} features")
+            
+            if len(final_clean) < 10:
+                print(f"❌ Insufficient clean data: {len(final_clean)}")
+                return pd.DataFrame()
+            
+            # Return only the columns we need
+            result_df = final_clean[available_features + ['target']].copy()
+            print(f"✅ Feature preparation successful: {result_df.shape}")
+            
+            return result_df
             
         except Exception as e:
-            print(f"❌ Error preparing features: {e}")
-            return df
+            print(f"❌ Feature preparation failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return pd.DataFrame()
     
-    def _calculate_rsi(self, prices: pd.Series, window: int = 14) -> pd.Series:
-        """Calculate RSI indicator"""
-        delta = prices.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
-        rs = gain / loss
-        return 100 - (100 / (1 + rs))
-    
-    def _calculate_macd(self, prices: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> Tuple[pd.Series, pd.Series]:
-        """Calculate MACD indicator"""
-        ema_fast = prices.ewm(span=fast).mean()
-        ema_slow = prices.ewm(span=slow).mean()
-        macd = ema_fast - ema_slow
-        macd_signal = macd.ewm(span=signal).mean()
-        return macd, macd_signal
-    
-    def _calculate_bollinger_bands(self, prices: pd.Series, window: int = 20, std_dev: int = 2) -> Tuple[pd.Series, pd.Series]:
-        """Calculate Bollinger Bands"""
-        sma = prices.rolling(window).mean()
-        std = prices.rolling(window).std()
-        upper = sma + (std * std_dev)
-        lower = sma - (std * std_dev)
-        return upper, lower
-    
-    def create_sequences(self, data: np.array, target: np.array) -> Tuple[np.array, np.array]:
-        """Create sequences for LSTM training"""
-        X, y = [], []
-        for i in range(self.sequence_length, len(data)):
-            X.append(data[i-self.sequence_length:i])
-            y.append(target[i])
-        return np.array(X), np.array(y)
-    
-    def build_lstm_model(self, input_shape: Tuple) -> keras.Model:
-        """Build LSTM neural network"""
-        model = keras.Sequential([
-            # First LSTM layer
-            layers.LSTM(50, return_sequences=True, input_shape=input_shape),
-            layers.Dropout(0.2),
+    def _safe_rsi(self, prices: pd.Series, window: int = 14) -> pd.Series:
+        """FIXED: Safer RSI calculation with proper error handling"""
+        try:
+            if len(prices) < window:
+                return pd.Series([50.0] * len(prices), index=prices.index)
             
-            # Second LSTM layer
-            layers.LSTM(50, return_sequences=True),
-            layers.Dropout(0.2),
+            delta = prices.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=window, min_periods=1).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=window, min_periods=1).mean()
             
-            # Third LSTM layer
-            layers.LSTM(25),
-            layers.Dropout(0.2),
+            # Avoid division by zero
+            rs = gain / (loss + 1e-10)
+            rsi = 100 - (100 / (1 + rs))
             
-            # Dense layers
-            layers.Dense(25, activation='relu'),
-            layers.Dense(1)
-        ])
-        
-        # Compile model
-        model.compile(
-            optimizer='adam',
-            loss='mse',
-            metrics=['mae']
-        )
-        
-        return model
+            # Fill NaN with neutral RSI
+            return rsi.fillna(50.0)
+            
+        except Exception as e:
+            print(f"⚠️ RSI calculation error: {e}")
+            return pd.Series([50.0] * len(prices), index=prices.index)
     
     def train_model(self, df: pd.DataFrame, test_size: float = 0.2) -> Dict:
-        """Train the ML model"""
+        """FIXED: More robust training with better error handling"""
         try:
-            print(f"🤖 Training {self.model_type.upper()} model...")
+            print(f"🤖 Training {self.model_type.upper()} model with {len(df)} samples...")
             
             # Prepare features
             df_features = self.prepare_features(df)
             
-            if len(df_features) < 50:
-                print("⚠️ Insufficient data for training (need at least 50 samples)")
-                return {'success': False, 'error': 'Insufficient data'}
+            if df_features.empty or len(df_features) < 20:
+                error_msg = f"Insufficient data for training (need 20+, have {len(df_features)})"
+                print(f"❌ {error_msg}")
+                return {'success': False, 'error': error_msg}
             
-            print(f"🔍 DataFrame info before cleaning:")
-            print(f"   Shape: {df_features.shape}")
-            print(f"   Columns: {list(df_features.columns)}")
-            print(f"   Dtypes: {dict(df_features.dtypes)}")
+            print(f"✅ Features prepared: {df_features.shape}")
             
-            # AGRESYWNE czyszczenie danych
-            feature_columns = []
-            for col in df_features.columns:
-                if col not in ['timestamp', 'target', 'input_token', 'output_token', 'profitable']:
-                    try:
-                        # Spróbuj skonwertować kolumnę na float
-                        test_series = pd.to_numeric(df_features[col], errors='coerce')
-                        if not test_series.isna().all():  # Jeśli nie wszystko to NaN
-                            feature_columns.append(col)
-                            print(f"✅ Added feature: {col} (type: {df_features[col].dtype})")
-                        else:
-                            print(f"❌ Skipped {col}: all NaN after conversion")
-                    except Exception as e:
-                        print(f"❌ Skipped {col}: conversion error - {e}")
+            # FIXED: Robust data extraction
+            feature_cols = [col for col in df_features.columns if col != 'target']
             
-            print(f"📊 Final feature columns: {feature_columns}")
-            
-            if not feature_columns:
-                return {'success': False, 'error': 'No convertible feature columns found'}
-            
-            # BEZPIECZNA konwersja danych
             try:
-                # Konwertuj każdą kolumnę osobno
-                X_data = []
-                for col in feature_columns:
-                    col_data = pd.to_numeric(df_features[col], errors='coerce')
-                    X_data.append(col_data.values)
+                X = df_features[feature_cols].values.astype(np.float64)
+                y = df_features['target'].values.astype(np.float64)
                 
-                X = np.column_stack(X_data).astype(np.float64)
-                y = pd.to_numeric(df_features['target'], errors='coerce').astype(np.float64)
+                print(f"📊 Data shapes: X={X.shape}, y={y.shape}")
                 
-                print(f"🔍 Data after conversion:")
-                print(f"   X shape: {X.shape}, dtype: {X.dtype}")
-                print(f"   y shape: {y.shape}, dtype: {y.dtype}")
+                # Check for infinite values
+                if np.any(np.isinf(X)) or np.any(np.isinf(y)):
+                    print("⚠️ Removing infinite values...")
+                    finite_mask = np.isfinite(X).all(axis=1) & np.isfinite(y)
+                    X = X[finite_mask]
+                    y = y[finite_mask]
+                    print(f"📊 After removing infinites: X={X.shape}, y={y.shape}")
+                
+                if len(X) < 10:
+                    return {'success': False, 'error': f'Too few samples after cleaning: {len(X)}'}
                 
             except Exception as e:
-                print(f"❌ Data conversion failed: {e}")
-                return {'success': False, 'error': f'Data conversion failed: {str(e)}'}
+                print(f"❌ Data preparation error: {e}")
+                return {'success': False, 'error': f'Data preparation failed: {str(e)}'}
             
-            # BEZPIECZNE usuwanie NaN
-            try:
-                # Użyj pandas do znajdowania validnych indeksów
-                df_temp = pd.DataFrame(X, columns=feature_columns)
-                df_temp['target'] = y
-                df_clean = df_temp.dropna()
-                
-                if len(df_clean) < 20:
-                    print(f"❌ Too few clean samples: {len(df_clean)}")
-                    return {'success': False, 'error': f'Only {len(df_clean)} clean samples (need 20+)'}
-                
-                X = df_clean[feature_columns].values.astype(np.float64)
-                y = df_clean['target'].values.astype(np.float64)
-                
-                print(f"📊 Clean data: {X.shape[0]} samples, {X.shape[1]} features")
-                
-            except Exception as e:
-                print(f"❌ Data cleaning failed: {e}")
-                return {'success': False, 'error': f'Data cleaning failed: {str(e)}'}
-            
-            # Final validation
-            if np.any(np.isinf(X)) or np.any(np.isinf(y)):
-                print("❌ Data contains infinite values")
-                return {'success': False, 'error': 'Data contains infinite values'}
-            
-            # Split data
-            split_idx = max(1, int(len(X) * (1 - test_size)))
+            # Train-test split
+            split_idx = max(5, int(len(X) * (1 - test_size)))
             X_train, X_test = X[:split_idx], X[split_idx:]
             y_train, y_test = y[:split_idx], y[split_idx:]
             
-            print(f"📊 Training split: {len(X_train)} train, {len(X_test)} test")
+            print(f"📊 Split sizes: train={len(X_train)}, test={len(X_test)}")
             
-            if len(X_train) < 10:
-                return {'success': False, 'error': f'Training set too small: {len(X_train)}'}
-            
-            if self.model_type == "lstm":
-                return self._train_lstm_model(X_train, X_test, y_train, y_test)
-            elif self.model_type == "random_forest":
+            # FIXED: Focus on Random Forest for reliability
+            if self.model_type == "random_forest" or len(X_train) < 50:
                 return self._train_rf_model(X_train, X_test, y_train, y_test)
             elif self.model_type == "gradient_boost":
                 return self._train_gb_model(X_train, X_test, y_train, y_test)
             else:
-                return {'success': False, 'error': f'Unknown model type: {self.model_type}'}
+                # Fallback to Random Forest for LSTM if dataset too small
+                print("⚠️ Using Random Forest instead of LSTM for small dataset")
+                self.model_type = "random_forest"
+                return self._train_rf_model(X_train, X_test, y_train, y_test)
                 
         except Exception as e:
             print(f"❌ Training error: {e}")
             import traceback
-            print(f"📋 Full traceback:")
-            print(traceback.format_exc())
+            traceback.print_exc()
             return {'success': False, 'error': str(e)}
     
-    def _train_lstm_model(self, X_train, X_test, y_train, y_test) -> Dict:
-        """Train LSTM model"""
+    def _train_rf_model(self, X_train, X_test, y_train, y_test) -> Dict:
+        """FIXED: Simplified and more robust Random Forest training"""
         try:
-            # Scale features
-            X_train_scaled = self.feature_scaler.fit_transform(X_train)
-            X_test_scaled = self.feature_scaler.transform(X_test)
+            print("🌲 Training Random Forest model...")
             
-            # Scale target
-            y_train_scaled = self.scaler.fit_transform(y_train.reshape(-1, 1)).flatten()
-            y_test_scaled = self.scaler.transform(y_test.reshape(-1, 1)).flatten()
+            # FIXED: Scale features safely
+            try:
+                X_train_scaled = self.feature_scaler.fit_transform(X_train)
+                X_test_scaled = self.feature_scaler.transform(X_test)
+            except Exception as e:
+                print(f"⚠️ Scaling error, using original data: {e}")
+                X_train_scaled = X_train
+                X_test_scaled = X_test
             
-            # Create sequences
-            X_train_seq, y_train_seq = self.create_sequences(X_train_scaled, y_train_scaled)
-            X_test_seq, y_test_seq = self.create_sequences(X_test_scaled, y_test_scaled)
-            
-            if len(X_train_seq) == 0:
-                return {'success': False, 'error': 'Not enough data for sequence creation'}
-            
-            # Build model
-            self.model = self.build_lstm_model((X_train_seq.shape[1], X_train_seq.shape[2]))
-            
-            # Train model
-            history = self.model.fit(
-                X_train_seq, y_train_seq,
-                epochs=50,
-                batch_size=32,
-                validation_data=(X_test_seq, y_test_seq),
-                verbose=0,
-                callbacks=[
-                    keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True),
-                    keras.callbacks.ReduceLROnPlateau(patience=5, factor=0.5)
-                ]
+            # FIXED: Simpler Random Forest configuration
+            self.model = RandomForestRegressor(
+                n_estimators=50,  # Reduced for faster training
+                max_depth=8,      # Reduced to prevent overfitting
+                min_samples_split=3,
+                min_samples_leaf=2,
+                random_state=42,
+                n_jobs=1  # Changed from -1 to avoid potential issues
             )
             
-            # Evaluate model
-            predictions = self.model.predict(X_test_seq)
-            predictions_unscaled = self.scaler.inverse_transform(predictions.reshape(-1, 1)).flatten()
-            y_test_unscaled = self.scaler.inverse_transform(y_test_seq.reshape(-1, 1)).flatten()
+            # Train model
+            print("🔄 Training Random Forest...")
+            self.model.fit(X_train_scaled, y_train)
+            
+            # Make predictions
+            print("🔮 Making predictions...")
+            train_pred = self.model.predict(X_train_scaled)
+            test_pred = self.model.predict(X_test_scaled)
             
             # Calculate metrics
-            mse = mean_squared_error(y_test_unscaled, predictions_unscaled)
-            mae = mean_absolute_error(y_test_unscaled, predictions_unscaled)
-            r2 = r2_score(y_test_unscaled, predictions_unscaled)
+            train_mse = mean_squared_error(y_train, train_pred)
+            test_mse = mean_squared_error(y_test, test_pred)
+            test_mae = mean_absolute_error(y_test, test_pred)
+            test_r2 = r2_score(y_test, test_pred)
             
-            # Calculate direction accuracy
-            actual_direction = np.sign(np.diff(y_test_unscaled))
-            pred_direction = np.sign(np.diff(predictions_unscaled))
-            accuracy = np.mean(actual_direction == pred_direction) * 100
+            # Direction accuracy
+            if len(y_test) > 1:
+                actual_direction = np.sign(np.diff(y_test))
+                pred_direction = np.sign(np.diff(test_pred))
+                accuracy = np.mean(actual_direction == pred_direction) * 100
+            else:
+                accuracy = 50.0
             
+            # Update metrics
             self.metrics.update({
-                'mse': mse,
-                'mae': mae,
-                'r2': r2,
-                'accuracy': accuracy,
+                'mse': float(test_mse),
+                'mae': float(test_mae),
+                'r2': float(test_r2),
+                'accuracy': float(accuracy),
                 'last_trained': datetime.now(),
-                'training_samples': len(X_train_seq)
+                'training_samples': len(X_train)
             })
             
             self.is_trained = True
             
-            print(f"✅ LSTM model trained successfully!")
-            print(f"   • MSE: {mse:.6f}")
-            print(f"   • MAE: {mae:.6f}")
-            print(f"   • R²: {r2:.4f}")
+            print(f"✅ Random Forest training successful!")
+            print(f"   • Training MSE: {train_mse:.6f}")
+            print(f"   • Test MSE: {test_mse:.6f}")
+            print(f"   • Test MAE: {test_mae:.6f}")
+            print(f"   • Test R²: {test_r2:.4f}")
             print(f"   • Direction Accuracy: {accuracy:.1f}%")
             
             return {
                 'success': True,
-                'metrics': self.metrics,
-                'training_history': history.history
+                'metrics': self.metrics.copy(),
+                'training_samples': len(X_train),
+                'test_samples': len(X_test)
             }
             
         except Exception as e:
-            print(f"❌ LSTM training error: {e}")
-            return {'success': False, 'error': str(e)}
-    
-    def _train_rf_model(self, X_train, X_test, y_train, y_test) -> Dict:
-        """Train Random Forest model"""
-        try:
-            # Scale features
-            X_train_scaled = self.feature_scaler.fit_transform(X_train)
-            X_test_scaled = self.feature_scaler.transform(X_test)
-            
-            # Create model
-            self.model = RandomForestRegressor(
-                n_estimators=100,
-                max_depth=10,
-                min_samples_split=5,
-                min_samples_leaf=2,
-                random_state=42,
-                n_jobs=-1
-            )
-            
-            # Train model
-            self.model.fit(X_train_scaled, y_train)
-            
-            # Predictions
-            predictions = self.model.predict(X_test_scaled)
-            
-            # Calculate metrics
-            mse = mean_squared_error(y_test, predictions)
-            mae = mean_absolute_error(y_test, predictions)
-            r2 = r2_score(y_test, predictions)
-            
-            # Direction accuracy
-            actual_direction = np.sign(np.diff(y_test))
-            pred_direction = np.sign(np.diff(predictions))
-            accuracy = np.mean(actual_direction == pred_direction) * 100
-            
-            self.metrics.update({
-                'mse': mse,
-                'mae': mae,
-                'r2': r2,
-                'accuracy': accuracy,
-                'last_trained': datetime.now(),
-                'training_samples': len(X_train)
-            })
-            
-            self.is_trained = True
-            
-            print(f"✅ Random Forest model trained successfully!")
-            print(f"   • MSE: {mse:.6f}")
-            print(f"   • MAE: {mae:.6f}")
-            print(f"   • R²: {r2:.4f}")
-            print(f"   • Direction Accuracy: {accuracy:.1f}%")
-            
-            return {'success': True, 'metrics': self.metrics}
-            
-        except Exception as e:
             print(f"❌ Random Forest training error: {e}")
+            import traceback
+            traceback.print_exc()
             return {'success': False, 'error': str(e)}
     
     def _train_gb_model(self, X_train, X_test, y_train, y_test) -> Dict:
-        """Train Gradient Boosting model"""
+        """FIXED: Simplified Gradient Boosting"""
         try:
-            # Scale features
+            print("🚀 Training Gradient Boosting model...")
+            
             X_train_scaled = self.feature_scaler.fit_transform(X_train)
             X_test_scaled = self.feature_scaler.transform(X_test)
             
-            # Create model
+            # Simpler GB configuration
             self.model = GradientBoostingRegressor(
-                n_estimators=100,
-                max_depth=6,
+                n_estimators=50,
+                max_depth=4,
                 learning_rate=0.1,
                 random_state=42
             )
             
-            # Train model
             self.model.fit(X_train_scaled, y_train)
-            
-            # Predictions
             predictions = self.model.predict(X_test_scaled)
             
             # Calculate metrics
@@ -428,91 +353,105 @@ class PricePredictionModel:
             r2 = r2_score(y_test, predictions)
             
             # Direction accuracy
-            actual_direction = np.sign(np.diff(y_test))
-            pred_direction = np.sign(np.diff(predictions))
-            accuracy = np.mean(actual_direction == pred_direction) * 100
+            if len(y_test) > 1:
+                actual_direction = np.sign(np.diff(y_test))
+                pred_direction = np.sign(np.diff(predictions))
+                accuracy = np.mean(actual_direction == pred_direction) * 100
+            else:
+                accuracy = 50.0
             
             self.metrics.update({
-                'mse': mse,
-                'mae': mae,
-                'r2': r2,
-                'accuracy': accuracy,
+                'mse': float(mse),
+                'mae': float(mae), 
+                'r2': float(r2),
+                'accuracy': float(accuracy),
                 'last_trained': datetime.now(),
                 'training_samples': len(X_train)
             })
             
             self.is_trained = True
             
-            print(f"✅ Gradient Boosting model trained successfully!")
+            print(f"✅ Gradient Boosting training successful!")
             print(f"   • MSE: {mse:.6f}")
             print(f"   • MAE: {mae:.6f}")
             print(f"   • R²: {r2:.4f}")
             print(f"   • Direction Accuracy: {accuracy:.1f}%")
             
-            return {'success': True, 'metrics': self.metrics}
+            return {'success': True, 'metrics': self.metrics.copy()}
             
         except Exception as e:
             print(f"❌ Gradient Boosting training error: {e}")
             return {'success': False, 'error': str(e)}
     
     def predict_next_price(self, recent_data: pd.DataFrame) -> Dict:
-        """Predict next price based on recent data"""
+        """FIXED: More robust prediction with better error handling"""
         try:
             if not self.is_trained:
                 return {'error': 'Model not trained'}
             
+            print(f"🔮 Making prediction with {len(recent_data)} data points")
+            
             # Prepare features
             df_features = self.prepare_features(recent_data)
             
-            if len(df_features) == 0:
-                return {'error': 'No valid features generated'}
-            
-            # Get feature columns
-            feature_columns = [col for col in df_features.columns 
-                             if col not in ['timestamp', 'target', 'input_token', 'output_token', 'profitable']]
+            if df_features.empty:
+                return {'error': 'No valid features for prediction'}
             
             # Get latest features
-            latest_features = df_features[feature_columns].iloc[-1:].values
+            feature_cols = [col for col in df_features.columns if col != 'target']
+            latest_features = df_features[feature_cols].iloc[-1:].values
             
-            if self.model_type == "lstm":
-                # For LSTM, we need sequence data
-                if len(df_features) >= self.sequence_length:
-                    sequence_data = self.feature_scaler.transform(
-                        df_features[feature_columns].iloc[-self.sequence_length:].values
-                    )
-                    sequence_data = sequence_data.reshape(1, self.sequence_length, -1)
-                    
-                    prediction_scaled = self.model.predict(sequence_data, verbose=0)
-                    prediction = self.scaler.inverse_transform(prediction_scaled.reshape(-1, 1))[0, 0]
+            print(f"📊 Using {len(feature_cols)} features for prediction")
+            
+            # Scale features and predict
+            try:
+                if hasattr(self.feature_scaler, 'transform'):
+                    latest_features_scaled = self.feature_scaler.transform(latest_features)
                 else:
-                    return {'error': f'Need at least {self.sequence_length} data points for LSTM prediction'}
-            else:
-                # For traditional ML models
-                latest_features_scaled = self.feature_scaler.transform(latest_features)
+                    latest_features_scaled = latest_features
+                
                 prediction = self.model.predict(latest_features_scaled)[0]
+                
+            except Exception as e:
+                print(f"⚠️ Prediction scaling error: {e}")
+                prediction = self.model.predict(latest_features)[0]
             
-            # Calculate confidence based on recent model performance
-            confidence = max(0.1, min(0.9, self.metrics.get('r2', 0.5)))
-            
-            # Direction prediction - POPRAWIONE: użyj kolumny 'price' jeśli dostępna
+            # Get current price for comparison
             if 'price' in recent_data.columns:
                 current_price = recent_data['price'].iloc[-1]
             else:
                 current_price = recent_data['amount_out'].iloc[-1]
-                
-            direction = 'up' if prediction > current_price else 'down'
-            price_change_pct = ((prediction - current_price) / current_price) * 100
             
-            return {
-                'predicted_price': float(prediction),
-                'current_price': float(current_price),
-                'price_change': float(prediction - current_price),
-                'price_change_pct': float(price_change_pct),
+            current_price = float(current_price)
+            prediction = float(prediction)
+            
+            # Calculate metrics
+            direction = 'up' if prediction > current_price else 'down'
+            price_change = prediction - current_price
+            price_change_pct = (price_change / current_price) * 100
+            
+            # FIXED: More realistic confidence based on model performance
+            base_confidence = max(0.1, min(0.8, self.metrics.get('r2', 0.3)))
+            
+            # Adjust confidence based on prediction magnitude
+            magnitude_factor = min(1.0, abs(price_change_pct) / 10.0)  # Scale down for large changes
+            confidence = base_confidence * (0.7 + 0.3 * magnitude_factor)
+            
+            result = {
+                'predicted_price': prediction,
+                'current_price': current_price,
+                'price_change': price_change,
+                'price_change_pct': price_change_pct,
                 'direction': direction,
                 'confidence': float(confidence),
                 'model_type': self.model_type,
-                'prediction_time': datetime.now().isoformat()
+                'prediction_time': datetime.now().isoformat(),
+                'features_used': len(feature_cols)
             }
+            
+            print(f"🎯 Prediction: {direction.upper()} ${prediction:.4f} (confidence: {confidence:.2f})")
+            
+            return result
             
         except Exception as e:
             print(f"❌ Prediction error: {e}")
@@ -522,25 +461,20 @@ class PricePredictionModel:
         """Save trained model"""
         try:
             if not self.is_trained:
-                print("⚠️ No trained model to save")
                 return False
             
             if filepath is None:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filepath = f"ml/models/{self.model_type}_model_{timestamp}"
             
-            if self.model_type == "lstm":
-                self.model.save(f"{filepath}.h5")
-            else:
-                joblib.dump(self.model, f"{filepath}.pkl")
+            # Save model
+            joblib.dump(self.model, f"{filepath}.pkl")
             
-            # Save scalers and metadata
+            # Save metadata
             joblib.dump({
                 'feature_scaler': self.feature_scaler,
-                'target_scaler': self.scaler,
                 'metrics': self.metrics,
                 'model_type': self.model_type,
-                'sequence_length': self.sequence_length
             }, f"{filepath}_metadata.pkl")
             
             print(f"✅ Model saved: {filepath}")
@@ -549,117 +483,83 @@ class PricePredictionModel:
         except Exception as e:
             print(f"❌ Error saving model: {e}")
             return False
-    
-    def load_model(self, filepath: str):
-        """Load trained model"""
-        try:
-            # Load metadata
-            metadata = joblib.load(f"{filepath}_metadata.pkl")
-            self.feature_scaler = metadata['feature_scaler']
-            self.scaler = metadata['target_scaler']
-            self.metrics = metadata['metrics']
-            self.model_type = metadata['model_type']
-            self.sequence_length = metadata.get('sequence_length', 60)
-            
-            # Load model
-            if self.model_type == "lstm":
-                self.model = keras.models.load_model(f"{filepath}.h5")
-            else:
-                self.model = joblib.load(f"{filepath}.pkl")
-            
-            self.is_trained = True
-            print(f"✅ Model loaded: {filepath}")
-            return True
-            
-        except Exception as e:
-            print(f"❌ Error loading model: {e}")
-            return False
 
 class MLTradingIntegration:
-    """Integration class for ML predictions with trading system"""
+    """FIXED: Simplified ML integration focused on reliability"""
     
     def __init__(self):
+        # FIXED: Start with only Random Forest for reliability
         self.models = {
-            'lstm': PricePredictionModel('lstm'),
             'random_forest': PricePredictionModel('random_forest'),
-            'gradient_boost': PricePredictionModel('gradient_boost')
         }
-        self.active_model = 'lstm'
-        self.prediction_cache = {}
+        self.active_model = 'random_forest'
         self.last_training_time = None
         
-    def train_all_models(self, df: pd.DataFrame):
-        """Train all available models"""
-        results = {}
-        
-        for model_name, model in self.models.items():
-            print(f"\n🤖 Training {model_name} model...")
-            result = model.train_model(df)
-            results[model_name] = result
-            
-            if result.get('success'):
-                model.save_model()
-        
-        self.last_training_time = datetime.now()
-        return results
-    
     def get_ensemble_prediction(self, recent_data: pd.DataFrame) -> Dict:
-        """Get ensemble prediction from multiple models with auto-training"""
-        # DODANE: Auto-training jeśli żaden model nie jest wytrenowany
+        """FIXED: Simplified ensemble with auto-training and better error handling"""
+        print(f"🔮 Getting ensemble prediction from {len(recent_data)} data points")
+        
+        # Check if we have any trained models
         trained_models = [name for name, model in self.models.items() if model.is_trained]
         
-        if not trained_models and len(recent_data) >= 100:
-            print("🤖 No trained models found - starting auto-training...")
+        if not trained_models:
+            print("🤖 No trained models found - attempting auto-training...")
+            
+            if len(recent_data) < 50:
+                return {'error': f'Insufficient data for training (need 50+, have {len(recent_data)})'}
+            
+            # Auto-train Random Forest
             try:
-                # Trenuj tylko jeden model (Random Forest) dla szybkości
                 training_result = self.models['random_forest'].train_model(recent_data)
                 
                 if training_result.get('success'):
                     print("✅ Auto-training successful!")
                     self.models['random_forest'].save_model()
+                    trained_models = ['random_forest']
                 else:
-                    print(f"❌ Auto-training failed: {training_result.get('error', 'Unknown error')}")
-                    return {'error': f'Auto-training failed: {training_result.get("error", "Unknown error")}'}
+                    error_msg = training_result.get('error', 'Unknown training error')
+                    print(f"❌ Auto-training failed: {error_msg}")
+                    return {'error': f'Auto-training failed: {error_msg}'}
+                    
             except Exception as e:
                 print(f"❌ Auto-training exception: {e}")
                 return {'error': f'Auto-training exception: {str(e)}'}
         
+        # Get predictions from trained models
         predictions = []
         confidences = []
+        individual_predictions = {}
         
-        for model_name, model in self.models.items():
-            if model.is_trained:
-                try:
-                    pred = model.predict_next_price(recent_data)
-                    if 'predicted_price' in pred:
-                        predictions.append(pred['predicted_price'])
-                        confidences.append(pred['confidence'])
-                        print(f"✅ {model_name} prediction: ${pred['predicted_price']:.4f} (confidence: {pred['confidence']:.2f})")
-                    else:
-                        print(f"⚠️ {model_name} prediction failed: {pred.get('error', 'Unknown error')}")
-                except Exception as e:
-                    print(f"❌ {model_name} prediction error: {e}")
+        for model_name in trained_models:
+            model = self.models[model_name]
+            try:
+                pred = model.predict_next_price(recent_data)
+                
+                if 'predicted_price' in pred:
+                    predictions.append(pred['predicted_price'])
+                    confidences.append(pred['confidence'])
+                    individual_predictions[model_name] = pred['predicted_price']
+                    
+                    print(f"✅ {model_name}: ${pred['predicted_price']:.4f} (conf: {pred['confidence']:.2f})")
+                else:
+                    print(f"⚠️ {model_name} prediction failed: {pred.get('error', 'Unknown error')}")
+                    
+            except Exception as e:
+                print(f"❌ {model_name} prediction error: {e}")
         
         if not predictions:
-            # DODANE: Lepszy error message
-            if len(recent_data) < 100:
-                return {'error': f'Insufficient data for training (need 100+, have {len(recent_data)})'}
-            else:
-                return {'error': 'No trained models available and auto-training failed'}
+            return {'error': 'No valid predictions generated'}
         
-        # Ensemble prediction (weighted average)
-        weights = np.array(confidences)
-        weights = weights / weights.sum()
-        
-        ensemble_price = np.average(predictions, weights=weights)
+        # FIXED: Simple ensemble (average for now)
+        ensemble_price = np.mean(predictions)
         ensemble_confidence = np.mean(confidences)
         
-        # POPRAWIONE: Użyj kolumny 'price' jeśli dostępna, inaczej 'amount_out'
+        # Get current price
         if 'price' in recent_data.columns:
             current_price = recent_data['price'].iloc[-1]
         else:
             current_price = recent_data['amount_out'].iloc[-1]
-            
+        
         direction = 'up' if ensemble_price > current_price else 'down'
         price_change_pct = ((ensemble_price - current_price) / current_price) * 100
         
@@ -670,28 +570,33 @@ class MLTradingIntegration:
             'direction': direction,
             'confidence': float(ensemble_confidence),
             'model_count': len(predictions),
-            'individual_predictions': dict(zip([name for name, model in self.models.items() if model.is_trained], predictions)),
+            'individual_predictions': individual_predictions,
             'prediction_time': datetime.now().isoformat()
         }
         
-        print(f"🔮 Ensemble Prediction: {direction.upper()} ${ensemble_price:.4f} (confidence: {ensemble_confidence:.2f})")
+        print(f"🎯 Ensemble: {direction.upper()} ${ensemble_price:.4f} ({ensemble_confidence:.2f} confidence)")
+        
         return result
+    
+    def get_model_performance(self) -> Dict:
+        """Get performance metrics for trained models"""
+        performance = {}
+        
+        for model_name, model in self.models.items():
+            if model.is_trained:
+                metrics = model.metrics.copy()
+                # Add human-readable timestamp
+                if metrics.get('last_trained'):
+                    metrics['last_trained'] = metrics['last_trained'].strftime('%Y-%m-%d %H:%M:%S')
+                performance[model_name] = metrics
+        
+        return performance
     
     def should_retrain(self) -> bool:
         """Check if models should be retrained"""
         if self.last_training_time is None:
             return True
         
-        # Retrain every 24 hours
+        # Retrain every 6 hours (more frequent for better adaptation)
         time_since_training = datetime.now() - self.last_training_time
-        return time_since_training > timedelta(hours=24)
-    
-    def get_model_performance(self) -> Dict:
-        """Get performance metrics for all models"""
-        performance = {}
-        
-        for model_name, model in self.models.items():
-            if model.is_trained:
-                performance[model_name] = model.metrics
-        
-        return performance
+        return time_since_training > timedelta(hours=6)
