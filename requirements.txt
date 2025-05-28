@@ -6,3 +6,7 @@ streamlit
 plotly
 websocket-client
 requests
+scikit-learn
+tensorflow
+keras
+joblib

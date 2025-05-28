@@ -1,4 +1,4 @@
-# run_worker.py - Enhanced with real-time market data and ML integration
+# run_worker.py - Enhanced with real-time market data and ML integration (FIXED)
 import os
 import sys
 import time
@@ -22,7 +22,7 @@ except ImportError as e:
     print(f"❌ Import error: {e}")
     sys.exit(1)
 
-# ML Integration
+# ML Integration with safe fallback
 try:
     from ml.price_predictor import MLTradingIntegration
     ML_AVAILABLE = True
@@ -42,13 +42,20 @@ class TradingBot:
         self.trading_signals = TradingSignals()
         self.state = {"count": 0}
         
-        # ML Integration
+        # Initialize ML attributes regardless of availability
+        self.ml_predictions = {}
+        self.ml_prediction_count = 0
+        self.last_ml_training = None
+        
+        # ML Integration setup
         if ML_AVAILABLE:
-            self.ml_integration = MLTradingIntegration()
-            self.ml_predictions = {}
-            self.last_ml_training = None
-            self.ml_prediction_count = 0
-            print("🤖 ML integration initialized")
+            try:
+                self.ml_integration = MLTradingIntegration()
+                print("🤖 ML integration initialized")
+            except Exception as e:
+                print(f"⚠️ ML integration failed: {e}")
+                self.ml_integration = None
+                ML_AVAILABLE = False
         else:
             self.ml_integration = None
             
@@ -72,7 +79,7 @@ class TradingBot:
         rsi = market_data.get('rsi', 0)
         trend = 'up' if market_data.get('price_change_24h', 0) > 0 else 'down'
         
-        # Add ML prediction info if available
+        # Safe ML info check
         ml_info = ""
         if self.ml_predictions:
             direction = self.ml_predictions.get('direction', 'unknown')
@@ -154,25 +161,29 @@ class TradingBot:
         base_confidence = signals.get('confidence', 0.5)
         
         # Enhance decision with ML predictions if available
-        if self.ml_predictions and 'confidence' in self.ml_predictions:
-            ml_confidence = self.ml_predictions['confidence']
-            ml_direction = self.ml_predictions.get('direction', 'neutral')
-            
-            # Combine traditional signals with ML predictions
-            if ml_confidence > 0.7:  # High ML confidence
-                if ml_direction == 'up':
-                    enhanced_confidence = min(base_confidence + 0.3, 1.0)
+        enhanced_confidence = base_confidence
+        
+        if self.ml_integration and self.ml_predictions and 'confidence' in self.ml_predictions:
+            try:
+                ml_confidence = self.ml_predictions['confidence']
+                ml_direction = self.ml_predictions.get('direction', 'neutral')
+                
+                # Combine traditional signals with ML predictions
+                if ml_confidence > 0.7:  # High ML confidence
+                    if ml_direction == 'up':
+                        enhanced_confidence = min(base_confidence + 0.3, 1.0)
+                    else:
+                        enhanced_confidence = max(base_confidence - 0.2, 0.0)
                 else:
-                    enhanced_confidence = max(base_confidence - 0.2, 0.0)
-            else:
+                    enhanced_confidence = base_confidence
+                
+                # Log enhanced decision making
+                if abs(enhanced_confidence - base_confidence) > 0.1:
+                    print(f"🧠 ML Enhanced Decision: {base_confidence:.2f} → {enhanced_confidence:.2f} "
+                          f"(ML: {ml_direction}, {ml_confidence:.2f})")
+            except Exception as e:
+                print(f"⚠️ ML decision enhancement error: {e}")
                 enhanced_confidence = base_confidence
-            
-            # Log enhanced decision making
-            if abs(enhanced_confidence - base_confidence) > 0.1:
-                print(f"🧠 ML Enhanced Decision: {base_confidence:.2f} → {enhanced_confidence:.2f} "
-                      f"(ML: {ml_direction}, {ml_confidence:.2f})")
-        else:
-            enhanced_confidence = base_confidence
         
         # Decision logic
         if enhanced_confidence > 0.4:
@@ -263,14 +274,18 @@ class TradingBot:
             'total_trades': self.state["count"],
             'market_connected': self.market_service is not None,
             'latest_price': self.latest_market_data.get('price', 0) if self.latest_market_data else 0,
-            'ml_available': ML_AVAILABLE,
-            'ml_predictions_count': self.ml_prediction_count if ML_AVAILABLE else 0
+            'ml_available': ML_AVAILABLE and self.ml_integration is not None,
+            'ml_predictions_count': self.ml_prediction_count
         }
         
         if ML_AVAILABLE and self.ml_integration:
-            performance = self.ml_integration.get_model_performance()
-            status['ml_models'] = list(performance.keys())
-            status['ml_last_training'] = self.last_ml_training
+            try:
+                performance = self.ml_integration.get_model_performance()
+                status['ml_models'] = list(performance.keys())
+                status['ml_last_training'] = self.last_ml_training
+            except Exception as e:
+                print(f"⚠️ Error getting ML performance: {e}")
+                status['ml_models'] = []
         
         return status
     
@@ -291,7 +306,7 @@ class TradingBot:
         start_count = self.state["count"]
         
         # Initial ML setup if available
-        if ML_AVAILABLE and start_count > 500:
+        if ML_AVAILABLE and self.ml_integration and start_count > 500:
             print("🤖 Checking for existing ML models...")
             # Could add logic to load existing models here
             
@@ -306,7 +321,7 @@ class TradingBot:
             time.sleep(5)  # Daj czas na pierwsze dane
         
         # Initial ML prediction update if enough data
-        if ML_AVAILABLE and start_count >= 100:
+        if ML_AVAILABLE and self.ml_integration and start_count >= 100:
             print("🤖 Generating initial ML predictions...")
             self.update_ml_predictions()
         
@@ -339,20 +354,28 @@ class TradingBot:
                     print(f"   • RSI: {rsi:.1f}")
                 
                 # ML status info
-                if ML_AVAILABLE and self.ml_predictions:
-                    ml_direction = self.ml_predictions.get('direction', 'unknown')
-                    ml_confidence = self.ml_predictions.get('confidence', 0)
-                    predicted_price = self.ml_predictions.get('predicted_price', 0)
-                    print(f"   • ML Prediction: {ml_direction.upper()} → ${predicted_price:.4f} ({ml_confidence:.2f})")
+                if ML_AVAILABLE and self.ml_integration and self.ml_predictions:
+                    try:
+                        ml_direction = self.ml_predictions.get('direction', 'unknown')
+                        ml_confidence = self.ml_predictions.get('confidence', 0)
+                        predicted_price = self.ml_predictions.get('predicted_price', 0)
+                        print(f"   • ML Prediction: {ml_direction.upper()} → ${predicted_price:.4f} ({ml_confidence:.2f})")
+                    except Exception as e:
+                        print(f"   • ML Status: Error displaying prediction ({e})")
                 
                 # System status every 10 cycles
                 if cycle % 10 == 0:
-                    status = self.get_system_status()
-                    print(f"\n🔍 System Status (Cycle {cycle}):")
-                    print(f"   • Market Data: {'✅ Connected' if status['market_connected'] else '❌ Disconnected'}")
-                    if ML_AVAILABLE:
-                        print(f"   • ML Models: {len(status.get('ml_models', []))} active")
-                        print(f"   • ML Predictions: {status['ml_predictions_count']} generated")
+                    try:
+                        status = self.get_system_status()
+                        print(f"\n🔍 System Status (Cycle {cycle}):")
+                        print(f"   • Market Data: {'✅ Connected' if status['market_connected'] else '❌ Disconnected'}")
+                        if status['ml_available']:
+                            print(f"   • ML Models: {len(status.get('ml_models', []))} active")
+                            print(f"   • ML Predictions: {status['ml_predictions_count']} generated")
+                        else:
+                            print(f"   • ML Status: ❌ Not available")
+                    except Exception as e:
+                        print(f"   • Status Error: {e}")
                 
                 # Przerwa między cyklami
                 print("⏳ Przerwa 60 sekund przed kolejnym cyklem...")
@@ -374,12 +397,15 @@ class TradingBot:
                 print(f"💾 Końcowy zapis stanu: {self.state['count']} transakcji")
             
             # Final system status
-            final_status = self.get_system_status()
-            print(f"\n🏁 Worker zakończony:")
-            print(f"   • Łączna liczba transakcji: {final_status['total_trades']:,}")
-            if ML_AVAILABLE:
-                print(f"   • ML predictions wygenerowanych: {final_status['ml_predictions_count']}")
-            print(f"   • Ostatnia cena SOL: ${final_status['latest_price']:.4f}")
+            try:
+                final_status = self.get_system_status()
+                print(f"\n🏁 Worker zakończony:")
+                print(f"   • Łączna liczba transakcji: {final_status['total_trades']:,}")
+                if final_status['ml_available']:
+                    print(f"   • ML predictions wygenerowanych: {final_status['ml_predictions_count']}")
+                print(f"   • Ostatnia cena SOL: ${final_status['latest_price']:.4f}")
+            except Exception as e:
+                print(f"🏁 Worker zakończony (status error: {e})")
 
 if __name__ == "__main__":
     bot = TradingBot()
