@@ -1,4 +1,4 @@
-# core/trade_executor.py - Enhanced with real market data
+# core/trade_executor.py - ENHANCED with PostgreSQL + CSV backup
 import csv
 import os
 import logging
@@ -27,13 +27,55 @@ class EnhancedTradeExecutor:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.last_market_data = None
+        self.db_manager = None
+        self.db_available = False
+        
+        # Initialize database connection
+        self._init_database()
+        
+    def _init_database(self):
+        """Initialize database connection with fallback"""
+        try:
+            from database.db_manager import get_db_manager
+            self.db_manager = get_db_manager()
+            self.db_available = True
+            print("✅ PostgreSQL database connected successfully")
+            
+            # Try to migrate existing CSV data
+            self._migrate_csv_if_needed()
+            
+        except Exception as e:
+            print(f"⚠️ PostgreSQL connection failed: {e}")
+            print("🔄 Continuing with CSV-only mode")
+            self.db_available = False
+    
+    def _migrate_csv_if_needed(self):
+        """Migrate existing CSV data to PostgreSQL on first run"""
+        if not self.db_available or not os.path.exists(MEMORY_FILE):
+            return
+        
+        try:
+            # Check if database is empty
+            count = self.db_manager.get_transaction_count()
+            if count == 0:
+                print("🔄 Migrating existing CSV data to PostgreSQL...")
+                success = self.db_manager.migrate_from_csv(MEMORY_FILE)
+                if success:
+                    print("✅ CSV data migration completed")
+                else:
+                    print("⚠️ CSV data migration had issues")
+            else:
+                print(f"📊 PostgreSQL already has {count} transactions")
+                
+        except Exception as e:
+            print(f"⚠️ Migration check failed: {e}")
         
     def update_market_data(self, market_data: Dict):
         """Aktualizuj dane rynkowe"""
         self.last_market_data = market_data
         
     def execute_trade(self, settings: Dict, market_data: Optional[Dict] = None) -> Optional[TradeResult]:
-        """Wykonaj transakcję z uwzględnieniem danych rynkowych"""
+        """Wykonaj transakcję z zapisem do PostgreSQL + CSV backup"""
         
         # Użyj przekazanych danych lub ostatnich dostępnych
         current_market_data = market_data or self.last_market_data
@@ -59,22 +101,21 @@ class EnhancedTradeExecutor:
         
         # Oblicz realistic price impact na podstawie spreadu i volatility
         volatility = market_data.get('volatility', 0.01)
-        base_impact = spread / market_price  # Podstawowy impact z spreadu
-        volatility_impact = random.uniform(-volatility, volatility) * 0.1  # 10% volatility impact
+        base_impact = spread / market_price
+        volatility_impact = random.uniform(-volatility, volatility) * 0.1
         
         price_impact = base_impact + volatility_impact
         
         # Symuluj wykonanie zlecenia
-        # Buy order - płacimy ask price + impact
         execution_price = ask_price * (1 + price_impact)
         amount_out = amount_in / execution_price
         
         # Faktyczny P&L uwzględniając spread
-        amount_out_usd = amount_out * bid_price  # Gdybyśmy od razu sprzedawali
+        amount_out_usd = amount_out * bid_price
         profitable = amount_out_usd > amount_in
         
-        # Informacje o strategii (dla przyszłych ML models)
-        signal_strength = random.uniform(0.1, 0.9)  # Placeholder for future ML signals
+        # Informacje o strategii
+        signal_strength = random.uniform(0.1, 0.9)
         strategy_used = "market_based_v1"
         
         trade_result = TradeResult(
@@ -82,7 +123,7 @@ class EnhancedTradeExecutor:
             input_token=input_token,
             output_token=output_token,
             amount_in=amount_in,
-            amount_out=amount_out_usd,  # Zapisujemy w USD dla łatwości analizy
+            amount_out=amount_out_usd,
             price_impact=price_impact,
             market_price=market_price,
             spread=spread,
@@ -91,8 +132,8 @@ class EnhancedTradeExecutor:
             profitable=profitable
         )
         
-        # Zapisz do CSV
-        self._save_to_csv(trade_result, market_data)
+        # ENHANCED: Zapisz do PostgreSQL + CSV
+        self._save_trade_data(trade_result, market_data)
         
         print(f"✅ Market Trade: {trade_result.input_token}→{trade_result.output_token}, "
               f"${trade_result.amount_in:.4f}→${trade_result.amount_out:.4f}, "
@@ -107,7 +148,7 @@ class EnhancedTradeExecutor:
         output_token = "USDC"
         amount_in = settings["trade_amount_usd"]
 
-        # Podstawowa symulacja (twoja oryginalna logika)
+        # Podstawowa symulacja
         price_impact = round(random.uniform(-0.01, 0.01), 5)
         amount_out = round(amount_in * (1 + price_impact), 5)
         profitable = amount_out > amount_in
@@ -119,14 +160,15 @@ class EnhancedTradeExecutor:
             amount_in=amount_in,
             amount_out=amount_out,
             price_impact=price_impact,
-            market_price=0.0,  # Brak danych rynkowych
+            market_price=0.0,
             spread=0.0,
             signal_strength=0.5,
             strategy_used="simulation_fallback",
             profitable=profitable
         )
 
-        self._save_to_csv(trade_result)
+        # ENHANCED: Zapisz do PostgreSQL + CSV
+        self._save_trade_data(trade_result)
         
         print(f"✅ Simulation: {trade_result.input_token}→{trade_result.output_token}, "
               f"${trade_result.amount_in:.4f}→${trade_result.amount_out:.4f}, "
@@ -134,8 +176,36 @@ class EnhancedTradeExecutor:
         
         return trade_result
     
+    def _save_trade_data(self, trade_result: TradeResult, market_data: Optional[Dict] = None):
+        """ENHANCED: Save to both PostgreSQL and CSV"""
+        
+        # 1. Try to save to PostgreSQL first
+        if self.db_available and self.db_manager:
+            try:
+                trade_data = {
+                    'timestamp': trade_result.timestamp,
+                    'input_token': trade_result.input_token,
+                    'output_token': trade_result.output_token,
+                    'amount_in': trade_result.amount_in,
+                    'amount_out': trade_result.amount_out,
+                    'price_impact': trade_result.price_impact
+                }
+                
+                db_id = self.db_manager.save_transaction(trade_data, market_data)
+                if db_id:
+                    print(f"✅ Saved to PostgreSQL (ID: {db_id})")
+                else:
+                    print("⚠️ PostgreSQL save failed, continuing with CSV")
+                    
+            except Exception as e:
+                print(f"⚠️ PostgreSQL error: {e}")
+                print("🔄 Falling back to CSV only")
+        
+        # 2. Always save to CSV as backup
+        self._save_to_csv(trade_result, market_data)
+    
     def _save_to_csv(self, trade_result: TradeResult, market_data: Optional[Dict] = None):
-        """Zapisz wynik transakcji do CSV z kompletnymi danymi ML"""
+        """Save to CSV file (backup method)"""
         os.makedirs("data", exist_ok=True)
         file_exists = os.path.isfile(MEMORY_FILE)
         
@@ -160,22 +230,85 @@ class EnhancedTradeExecutor:
             current_rsi                      # 9
         ]
         
-        # KRYTYCZNE: Sprawdź czy liczba wartości = liczba headers
-        if len(row) != len(headers):
-            print(f"❌ CSV ERROR: {len(headers)} headers vs {len(row)} values")
-            return
-        
-        # Zapisz do CSV z proper newline handling
+        # Zapisz do CSV
         try:
             with open(MEMORY_FILE, "a", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 if not file_exists or os.stat(MEMORY_FILE).st_size == 0:
                     writer.writerow(headers)
                 writer.writerow(row)
+            
+            print(f"✅ Saved to CSV backup")
+            
         except Exception as e:
-            print(f"❌ CSV write error: {e}")
-            print(f"Headers: {headers}")
-            print(f"Row: {row}")
+            print(f"❌ CSV backup failed: {e}")
+
+    def get_recent_transactions_hybrid(self, limit: int = 100) -> Optional[Dict]:
+        """Get recent transactions from PostgreSQL with CSV fallback"""
+        
+        # Try PostgreSQL first
+        if self.db_available and self.db_manager:
+            try:
+                df = self.db_manager.get_recent_transactions(limit)
+                if len(df) > 0:
+                    return {
+                        'source': 'postgresql',
+                        'data': df,
+                        'count': len(df)
+                    }
+            except Exception as e:
+                print(f"⚠️ PostgreSQL read error: {e}")
+        
+        # Fallback to CSV
+        try:
+            if os.path.exists(MEMORY_FILE):
+                import pandas as pd
+                df = pd.read_csv(MEMORY_FILE)
+                if len(df) > 0:
+                    df = df.tail(limit)  # Get last N records
+                    return {
+                        'source': 'csv',
+                        'data': df,
+                        'count': len(df)
+                    }
+        except Exception as e:
+            print(f"⚠️ CSV read error: {e}")
+        
+        return None
+    
+    def get_database_status(self) -> Dict:
+        """Get comprehensive database status"""
+        status = {
+            'postgresql_available': self.db_available,
+            'csv_available': os.path.exists(MEMORY_FILE),
+            'postgresql_count': 0,
+            'csv_count': 0,
+            'migration_needed': False
+        }
+        
+        # PostgreSQL stats
+        if self.db_available and self.db_manager:
+            try:
+                status['postgresql_count'] = self.db_manager.get_transaction_count()
+                db_stats = self.db_manager.get_database_stats()
+                status['postgresql_stats'] = db_stats
+            except Exception as e:
+                print(f"⚠️ Error getting PostgreSQL stats: {e}")
+        
+        # CSV stats
+        if os.path.exists(MEMORY_FILE):
+            try:
+                import pandas as pd
+                df = pd.read_csv(MEMORY_FILE)
+                status['csv_count'] = len(df)
+            except Exception as e:
+                print(f"⚠️ Error getting CSV stats: {e}")
+        
+        # Check if migration needed
+        if status['csv_count'] > 0 and status['postgresql_count'] == 0:
+            status['migration_needed'] = True
+        
+        return status
 
 # Funkcja kompatybilności wstecznej
 def simulate_trade(settings):
