@@ -197,10 +197,31 @@ class TradingBot:
         """Wykonaj cykl 30 transakcji z ML predictions"""
         print(f"\n🔄 Cykl - wykonuję 30 transakcji...")
         
-        # Update ML predictions before trading cycle (every 3rd cycle)
-        if self.ml_integration and self.state["count"] % 90 == 0:  # Every ~90 trades
-            print("🤖 Updating ML predictions...")
-            self.update_ml_predictions()
+        # ZMIANA: Sprawdzaj ML predictions częściej i z debugowaniem
+        if self.ml_integration:
+            print(f"🔍 DEBUG: Checking ML predictions. Current trades: {self.state['count']}")
+            
+            # Sprawdź czy plik memory.csv istnieje
+            if os.path.exists(MEMORY_FILE):
+                try:
+                    df = pd.read_csv(MEMORY_FILE)
+                    print(f"📊 DEBUG: Memory file has {len(df)} rows")
+                    
+                    # ZMIANA: Aktualizuj ML predictions co 30 transakcji zamiast 90
+                    if len(df) >= 100 and self.state["count"] % 30 == 0:
+                        print("🤖 Forcing ML predictions update...")
+                        self.update_ml_predictions()
+                    elif len(df) < 100:
+                        print(f"⚠️ Need more data: {len(df)}/100 transactions in memory.csv")
+                    else:
+                        print(f"⏳ Next ML update at trade: {((self.state['count'] // 30) + 1) * 30}")
+                        
+                except Exception as e:
+                    print(f"❌ Error reading memory.csv: {e}")
+            else:
+                print(f"❌ Memory file not found: {MEMORY_FILE}")
+        else:
+            print("⚠️ ML integration not available")
         
         executed_in_cycle = 0
         
@@ -289,6 +310,30 @@ class TradingBot:
         
         return status
     
+    def debug_ml_status(self):
+        """Debug ML system status"""
+        print("\n🔍 ML DEBUG STATUS:")
+        print(f"   • ML_AVAILABLE: {ML_AVAILABLE}")
+        print(f"   • ml_integration: {self.ml_integration is not None}")
+        print(f"   • Memory file exists: {os.path.exists(MEMORY_FILE)}")
+        
+        if os.path.exists(MEMORY_FILE):
+            try:
+                df = pd.read_csv(MEMORY_FILE)
+                print(f"   • Memory file rows: {len(df)}")
+                print(f"   • Memory file columns: {list(df.columns)}")
+                print(f"   • Last 3 rows preview:")
+                print(df.tail(3).to_string())
+            except Exception as e:
+                print(f"   • Error reading memory: {e}")
+        
+        if self.ml_integration:
+            try:
+                models = self.ml_integration.get_model_performance()
+                print(f"   • Available models: {list(models.keys())}")
+            except Exception as e:
+                print(f"   • Error getting models: {e}")
+    
     def start(self):
         """Uruchom bota tradingowego"""
         print("🚀 Uruchamiam Enhanced DexBot Worker z Real-time Market Data i ML...")
@@ -304,6 +349,9 @@ class TradingBot:
         # Załaduj stan
         self.load_state()
         start_count = self.state["count"]
+        
+        # Debug ML status na początku
+        self.debug_ml_status()
         
         # Initial ML setup if available
         if ML_AVAILABLE and self.ml_integration and start_count > 500:
@@ -323,6 +371,11 @@ class TradingBot:
         # Initial ML prediction update if enough data
         if ML_AVAILABLE and self.ml_integration and start_count >= 100:
             print("🤖 Generating initial ML predictions...")
+            self.update_ml_predictions()
+        
+        # DODATKOWE: Wymuszenie ML update jeśli mamy dużo danych
+        if ML_AVAILABLE and self.ml_integration:
+            print("🤖 FORCING initial ML predictions check...")
             self.update_ml_predictions()
         
         print(f"🎯 Rozpoczynam od transakcji #{start_count + 1}")
