@@ -1,5 +1,4 @@
-# run_worker.py - OPTIMIZED with Adaptive ML Trading
-import random
+# run_worker.py - FIXED COMPLETE VERSION with random import
 import os
 import sys
 import time
@@ -7,6 +6,7 @@ import json
 import csv
 import pandas as pd
 import threading
+import random  # FIXED: Added missing import
 from datetime import datetime
 from typing import Dict
 
@@ -285,7 +285,6 @@ class OptimizedTradingBot:
             return True
         elif enhanced_confidence > ml_threshold:
             # Probabilistic execution based on confidence
-            import random
             return random.random() < (enhanced_confidence * ml_factor)
         else:
             return random.random() < 0.4  # Low probability fallback

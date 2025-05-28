@@ -1,4 +1,4 @@
-# ml/price_predictor.py - OPTIMIZED Multi-Model Ensemble
+# ml/price_predictor.py - FIXED COMPLETE VERSION
 import numpy as np
 import pandas as pd
 import joblib
@@ -536,6 +536,32 @@ class OptimizedPricePredictionModel:
         directions = [1 if pred > current_price else -1 for pred in predictions.values()]
         agreement = abs(sum(directions)) / len(directions)
         return agreement
+    
+    def save_ensemble_models(self):
+        """FIXED: Save all trained models"""
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            for model_name, model in self.models.items():
+                filepath = f"ml/models/ensemble_{model_name}_{timestamp}"
+                joblib.dump(model, f"{filepath}.pkl")
+            
+            # Save metadata
+            metadata = {
+                'feature_scaler': self.feature_scaler,
+                'model_performance': self.model_performance,
+                'ensemble_weights': self.ensemble_weights,
+                'feature_importance': self.feature_importance,
+                'training_time': datetime.now().isoformat()
+            }
+            
+            joblib.dump(metadata, f"ml/models/ensemble_metadata_{timestamp}.pkl")
+            print(f"✅ Ensemble models saved: {timestamp}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error saving ensemble models: {e}")
+            return False
 
 class MLTradingIntegration:
     """OPTIMIZED: Enhanced ML integration with multi-model ensemble"""
