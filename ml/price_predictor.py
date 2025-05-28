@@ -619,11 +619,11 @@ class MLTradingIntegration:
         """Save all trained models"""
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
+        
             for model_name, model in self.models.items():
                 filepath = f"ml/models/ensemble_{model_name}_{timestamp}"
                 joblib.dump(model, f"{filepath}.pkl")
-            
+        
             # Save metadata
             metadata = {
                 'feature_scaler': self.feature_scaler,
@@ -632,11 +632,11 @@ class MLTradingIntegration:
                 'feature_importance': self.feature_importance,
                 'training_time': datetime.now().isoformat()
             }
-            
+        
             joblib.dump(metadata, f"ml/models/ensemble_metadata_{timestamp}.pkl")
             print(f"✅ Ensemble models saved: {timestamp}")
             return True
-            
+        
         except Exception as e:
             print(f"❌ Error saving ensemble models: {e}")
             return False
