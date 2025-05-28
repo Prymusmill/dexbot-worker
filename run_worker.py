@@ -252,15 +252,81 @@ class TradingBot:
         print(f"✅ Cykl zakończony: {executed_in_cycle}/30 transakcji wykonanych")
     
     def check_file_status(self):
-        """Sprawdź status plików"""
+        """Sprawdź status plików z szczegółowym debugowaniem"""
         if os.path.exists(MEMORY_FILE):
             size = os.stat(MEMORY_FILE).st_size
             try:
-                with open(MEMORY_FILE, "r") as f:
-                    lines = sum(1 for _ in f)
-                print(f"📁 {MEMORY_FILE}: {size:,} bajtów, {lines:,} linii")
-            except:
-                print(f"📁 {MEMORY_FILE}: {size:,} bajtów")
+                df = pd.read_csv(MEMORY_FILE)
+                lines = len(df)
+                
+                print(f"📁 {MEMORY_FILE}: {size:,} bajtów, {lines:,} wierszy", flush=True)
+                
+                # Pokaż ostatnie 5 transakcji
+                if len(df) > 0:
+                    print(f"📊 Ostatnie 5 transakcji:", flush=True)
+                    # Wybierz najważniejsze kolumny do wyświetlenia
+                    display_cols = []
+                    available_cols = df.columns.tolist()
+                    
+                    # Sprawdź które kolumny są dostępne i dodaj je do wyświetlania
+                    priority_cols = ['timestamp', 'price', 'action', 'pnl', 'volume', 'rsi', 'sma_20']
+                    for col in priority_cols:
+                        if col in available_cols:
+                            display_cols.append(col)
+                    
+                    # Jeśli nie ma priorytetowych kolumn, weź pierwsze 5
+                    if not display_cols:
+                        display_cols = available_cols[:min(5, len(available_cols))]
+                    
+                    try:
+                        print(df[display_cols].tail(5).to_string(index=False), flush=True)
+                    except Exception as e:
+                        print(f"   Błąd wyświetlania kolumn {display_cols}: {e}", flush=True)
+                        print(df.tail(5).to_string(index=False), flush=True)
+                    
+                    # Statystyki finansowe
+                    if 'pnl' in df.columns:
+                        total_pnl = df['pnl'].sum()
+                        avg_pnl = df['pnl'].mean()
+                        max_profit = df['pnl'].max()
+                        max_loss = df['pnl'].min()
+                        winning_trades = len(df[df['pnl'] > 0])
+                        losing_trades = len(df[df['pnl'] < 0])
+                        win_rate = (winning_trades / len(df)) * 100 if len(df) > 0 else 0
+                        
+                        print(f"💰 PnL Summary:", flush=True)
+                        print(f"   • Total PnL: ${total_pnl:.6f}", flush=True)
+                        print(f"   • Average PnL/trade: ${avg_pnl:.6f}", flush=True)
+                        print(f"   • Best trade: ${max_profit:.6f}", flush=True)
+                        print(f"   • Worst trade: ${max_loss:.6f}", flush=True)
+                        print(f"   • Win rate: {win_rate:.1f}% ({winning_trades}W/{losing_trades}L)", flush=True)
+                    
+                    # Informacje o cenach
+                    if 'price' in df.columns:
+                        current_price = df['price'].iloc[-1]
+                        price_change = df['price'].iloc[-1] - df['price'].iloc[-min(10, len(df))]
+                        price_change_pct = (price_change / df['price'].iloc[-min(10, len(df))]) * 100
+                        
+                        print(f"📈 Price Analysis (last 10 trades):", flush=True)
+                        print(f"   • Current price: ${current_price:.4f}", flush=True)
+                        print(f"   • Price change: ${price_change:+.4f} ({price_change_pct:+.2f}%)", flush=True)
+                    
+                    # Dostępne kolumny
+                    print(f"📋 Available columns: {', '.join(available_cols)}", flush=True)
+                else:
+                    print("⚠️ Plik memory.csv jest pusty", flush=True)
+                    
+            except Exception as e:
+                print(f"❌ Błąd czytania {MEMORY_FILE}: {e}", flush=True)
+                # Fallback do prostego sprawdzenia
+                try:
+                    with open(MEMORY_FILE, "r") as f:
+                        lines = sum(1 for _ in f)
+                    print(f"📁 {MEMORY_FILE}: {size:,} bajtów, {lines:,} linii (fallback)", flush=True)
+                except Exception as e2:
+                    print(f"📁 {MEMORY_FILE}: {size:,} bajtów (błąd liczenia linii: {e2})", flush=True)
+        else:
+            print(f"❌ Plik {MEMORY_FILE} nie istnieje", flush=True)
     
     def load_state(self):
         """Załaduj stan aplikacji"""
@@ -311,28 +377,72 @@ class TradingBot:
         return status
     
     def debug_ml_status(self):
-        """Debug ML system status"""
-        print("\n🔍 ML DEBUG STATUS:")
-        print(f"   • ML_AVAILABLE: {ML_AVAILABLE}")
-        print(f"   • ml_integration: {self.ml_integration is not None}")
-        print(f"   • Memory file exists: {os.path.exists(MEMORY_FILE)}")
+        """Debug ML system status z pełnymi szczegółami"""
+        print("\n🔍 ML DEBUG STATUS:", flush=True)
+        print(f"   • ML_AVAILABLE: {ML_AVAILABLE}", flush=True)
+        print(f"   • ml_integration: {self.ml_integration is not None}", flush=True)
+        print(f"   • Memory file exists: {os.path.exists(MEMORY_FILE)}", flush=True)
         
         if os.path.exists(MEMORY_FILE):
             try:
                 df = pd.read_csv(MEMORY_FILE)
-                print(f"   • Memory file rows: {len(df)}")
-                print(f"   • Memory file columns: {list(df.columns)}")
-                print(f"   • Last 3 rows preview:")
-                print(df.tail(3).to_string())
+                print(f"   • Memory file rows: {len(df)}", flush=True)
+                print(f"   • Memory file columns: {list(df.columns)}", flush=True)
+                
+                if len(df) > 0:
+                    print(f"   • Date range: {df.iloc[0].get('timestamp', 'N/A')} → {df.iloc[-1].get('timestamp', 'N/A')}", flush=True)
+                    
+                    # Sprawdź jakość danych dla ML
+                    required_ml_cols = ['price', 'volume', 'rsi']
+                    missing_cols = [col for col in required_ml_cols if col not in df.columns]
+                    if missing_cols:
+                        print(f"   ⚠️ Missing ML columns: {missing_cols}", flush=True)
+                    else:
+                        print(f"   ✅ All required ML columns present", flush=True)
+                    
+                    # Sprawdź czy są puste wartości
+                    null_counts = df.isnull().sum()
+                    if null_counts.sum() > 0:
+                        print(f"   ⚠️ Null values found: {dict(null_counts[null_counts > 0])}", flush=True)
+                    else:
+                        print(f"   ✅ No null values in data", flush=True)
+                
+                print(f"   • Last 3 rows preview:", flush=True)
+                print(df.tail(3).to_string(index=False), flush=True)
+                
             except Exception as e:
-                print(f"   • Error reading memory: {e}")
+                print(f"   • Error reading memory: {e}", flush=True)
         
         if self.ml_integration:
             try:
                 models = self.ml_integration.get_model_performance()
-                print(f"   • Available models: {list(models.keys())}")
+                print(f"   • Available models: {list(models.keys())}", flush=True)
+                
+                # Szczegóły o modelach
+                for model_name, performance in models.items():
+                    accuracy = performance.get('accuracy', 0)
+                    r2 = performance.get('r2', 0)
+                    print(f"     - {model_name}: Accuracy {accuracy:.1f}%, R² {r2:.3f}", flush=True)
+                    
             except Exception as e:
-                print(f"   • Error getting models: {e}")
+                print(f"   • Error getting models: {e}", flush=True)
+        
+        # Sprawdź ML predictions
+        if self.ml_predictions:
+            print(f"   • Current ML predictions:", flush=True)
+            for key, value in self.ml_predictions.items():
+                print(f"     - {key}: {value}", flush=True)
+            print(f"   • Total predictions made: {self.ml_prediction_count}", flush=True)
+        else:
+            print(f"   • No ML predictions yet", flush=True)
+        
+        # Sprawdź czy katalogi ML istnieją
+        ml_dirs = ['ml', 'ml/models', 'data']
+        for dir_path in ml_dirs:
+            exists = os.path.exists(dir_path)
+            print(f"   • Directory {dir_path}: {'✅' if exists else '❌'}", flush=True)
+        
+        print("", flush=True)  # Dodatkowa linia dla czytelności
     
     def start(self):
         """Uruchom bota tradingowego"""
@@ -395,16 +505,16 @@ class TradingBot:
                 
                 # Status podsumowujący
                 total_executed = self.state["count"] - start_count
-                print(f"\n📈 Statystyki sesji:")
-                print(f"   • Łącznie wykonano: {total_executed} nowych transakcji")
-                print(f"   • Całkowita liczba: {self.state['count']:,} transakcji")
-                print(f"   • Cykli ukończonych: {cycle}")
+                print(f"\n📈 Statystyki sesji:", flush=True)
+                print(f"   • Łącznie wykonano: {total_executed} nowych transakcji", flush=True)
+                print(f"   • Całkowita liczba: {self.state['count']:,} transakcji", flush=True)
+                print(f"   • Cykli ukończonych: {cycle}", flush=True)
                 
                 if self.latest_market_data:
                     price = self.latest_market_data.get('price', 0)
                     rsi = self.latest_market_data.get('rsi', 0)
-                    print(f"   • Aktualna cena SOL: ${price:.4f}")
-                    print(f"   • RSI: {rsi:.1f}")
+                    print(f"   • Aktualna cena SOL: ${price:.4f}", flush=True)
+                    print(f"   • RSI: {rsi:.1f}", flush=True)
                 
                 # ML status info
                 if ML_AVAILABLE and self.ml_integration and self.ml_predictions:
@@ -412,26 +522,26 @@ class TradingBot:
                         ml_direction = self.ml_predictions.get('direction', 'unknown')
                         ml_confidence = self.ml_predictions.get('confidence', 0)
                         predicted_price = self.ml_predictions.get('predicted_price', 0)
-                        print(f"   • ML Prediction: {ml_direction.upper()} → ${predicted_price:.4f} ({ml_confidence:.2f})")
+                        print(f"   • ML Prediction: {ml_direction.upper()} → ${predicted_price:.4f} ({ml_confidence:.2f})", flush=True)
                     except Exception as e:
-                        print(f"   • ML Status: Error displaying prediction ({e})")
+                        print(f"   • ML Status: Error displaying prediction ({e})", flush=True)
                 
                 # System status every 10 cycles
                 if cycle % 10 == 0:
                     try:
                         status = self.get_system_status()
-                        print(f"\n🔍 System Status (Cycle {cycle}):")
-                        print(f"   • Market Data: {'✅ Connected' if status['market_connected'] else '❌ Disconnected'}")
+                        print(f"\n🔍 System Status (Cycle {cycle}):", flush=True)
+                        print(f"   • Market Data: {'✅ Connected' if status['market_connected'] else '❌ Disconnected'}", flush=True)
                         if status['ml_available']:
-                            print(f"   • ML Models: {len(status.get('ml_models', []))} active")
-                            print(f"   • ML Predictions: {status['ml_predictions_count']} generated")
+                            print(f"   • ML Models: {len(status.get('ml_models', []))} active", flush=True)
+                            print(f"   • ML Predictions: {status['ml_predictions_count']} generated", flush=True)
                         else:
-                            print(f"   • ML Status: ❌ Not available")
+                            print(f"   • ML Status: ❌ Not available", flush=True)
                     except Exception as e:
-                        print(f"   • Status Error: {e}")
+                        print(f"   • Status Error: {e}", flush=True)
                 
                 # Przerwa między cyklami
-                print("⏳ Przerwa 60 sekund przed kolejnym cyklem...")
+                print("⏳ Przerwa 60 sekund przed kolejnym cyklem...", flush=True)
                 time.sleep(60)
                 
         except KeyboardInterrupt:
