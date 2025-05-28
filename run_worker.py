@@ -22,13 +22,15 @@ except ImportError as e:
     print(f"❌ Import error: {e}")
     sys.exit(1)
 
-# ML Integration with safe fallback
+# ML Integration with safe fallback - FIXED: Initialize ML_AVAILABLE first
+ML_AVAILABLE = False
 try:
     from ml.price_predictor import MLTradingIntegration
     ML_AVAILABLE = True
     print("✅ ML modules available")
 except ImportError as e:
     print(f"⚠️ ML modules not available: {e}")
+    ML_AVAILABLE = False
 
 STATE_FILE = "data/state.json"
 MEMORY_FILE = "data/memory.csv"
@@ -54,7 +56,6 @@ class TradingBot:
             except Exception as e:
                 print(f"⚠️ ML integration failed: {e}")
                 self.ml_integration = None
-                ML_AVAILABLE = False
         else:
             self.ml_integration = None
             
