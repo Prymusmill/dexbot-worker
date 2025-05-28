@@ -135,22 +135,30 @@ class EnhancedTradeExecutor:
         return trade_result
     
     def _save_to_csv(self, trade_result: TradeResult, market_data: Optional[Dict] = None):
-        """Zapisz wynik transakcji do CSV"""
+        """Zapisz wynik transakcji do CSV z kompletnymi danymi ML"""
         os.makedirs("data", exist_ok=True)
         file_exists = os.path.isfile(MEMORY_FILE)
         
-        # Extended row z dodatkowymi danymi
+        # POPRAWIONE: Kompletne headers z wszystkimi kolumnami ML
+        headers = ["timestamp", "input_token", "output_token", "amount_in", "amount_out", "price_impact", "price", "volume", "rsi"]
+        
+        # POPRAWIONE: Kompletny row z wszystkimi wartościami
+        # Pobierz dane z market_data lub użyj wartości domyślnych
+        current_price = market_data.get('price', trade_result.market_price) if market_data else trade_result.market_price
+        current_rsi = market_data.get('rsi', 50.0) if market_data else 50.0
+        volume = trade_result.amount_in  # Volume jako wartość transakcji
+        
         row = [
             trade_result.timestamp,
             trade_result.input_token,
             trade_result.output_token,
             trade_result.amount_in,
             trade_result.amount_out,
-            trade_result.price_impact
+            trade_result.price_impact,
+            current_price,    # DODANE: price dla ML
+            volume,          # DODANE: volume dla ML  
+            current_rsi      # DODANE: rsi dla ML
         ]
-        
-        # Nagłówki (zachowaj kompatybilność z starym formatem)
-        headers = ["timestamp", "input_token", "output_token", "amount_in", "amount_out", "price_impact", "price", "rsi"]
         
         with open(MEMORY_FILE, "a", newline="") as f:
             writer = csv.writer(f)
