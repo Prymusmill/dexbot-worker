@@ -1,8 +1,14 @@
+# Existing services + Persistent Volumes
 [[services]]
 name = "worker"
 source = "."
 build.buildCommand = "pip install -r requirements.txt"
 build.startCommand = "python run_worker.py"
+
+# DODANE: Persistent volumes for worker
+[services.volumes]
+data-volume = "/app/data"
+ml-volume = "/app/ml/models"
 
 [[services]]
 name = "api"
@@ -10,8 +16,23 @@ source = "."
 build.buildCommand = "pip install -r requirements.txt"
 build.startCommand = "python serve.py"
 
+# DODANE: Volumes for API (shared access to data)
+[services.volumes]
+data-volume = "/app/data"
+ml-volume = "/app/ml/models"
+
 [[services]]
 name = "dashboard"
 source = "."
 build.buildCommand = "pip install -r requirements.txt"
 build.startCommand = "streamlit run dashboard.py --server.port=$PORT --server.address=0.0.0.0"
+
+# DODANE: Volumes for dashboard (read access to data)
+[services.volumes]
+data-volume = "/app/data"
+ml-volume = "/app/ml/models"
+
+# DODANE: Environment variables
+[environment]
+PYTHONUNBUFFERED = "1"
+TF_CPP_MIN_LOG_LEVEL = "2"
