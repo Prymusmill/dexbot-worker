@@ -199,29 +199,29 @@ class TradingBot:
         print(f"\n🔄 Cykl - wykonuję 30 transakcji...")
     
         # ZMIANA: Sprawdzaj ML predictions częściej i z debugowaniem
-        if self.ml_integration:  # ✅ 4 spacje wcięcia
-            print(f"🔍 DEBUG: Checking ML predictions. Current trades: {self.state['count']}", flush=True)  # ✅ 8 spacji
+        if self.ml_integration:
+            print(f"🔍 DEBUG: Checking ML predictions. Current trades: {self.state['count']}", flush=True)
         
             # Sprawdź czy plik memory.csv istnieje
-            if os.path.exists(MEMORY_FILE):  # ✅ 8 spacji
-                try:  # ✅ 12 spacji
-                    df = pd.read_csv(MEMORY_FILE)  # ✅ 16 spacji
-                    print(f"📊 DEBUG: Memory file has {len(df)} rows", flush=True)  # ✅ 16 spacji
-                    print(f"📋 DEBUG: Available columns: {list(df.columns)}", flush=True)  # ✅ 16 spacji
+            if os.path.exists(MEMORY_FILE):
+                try:
+                    df = pd.read_csv(MEMORY_FILE)
+                    print(f"📊 DEBUG: Memory file has {len(df)} rows", flush=True)
+                    print(f"📋 DEBUG: Available columns: {list(df.columns)}", flush=True)
                 
                     # ZAWSZE próbuj aktualizować ML jeśli mamy 100+ transakcji
-                    if len(df) >= 100:  # ✅ 16 spacji
-                        print("🤖 Forcing ML predictions update...", flush=True)  # ✅ 20 spacji
-                        self.update_ml_predictions()  # ✅ 20 spacji
-                    else:  # ✅ 16 spacji
-                        print(f"⚠️ Need more data: {len(df)}/100 transactions in memory.csv", flush=True)  # ✅ 20 spacji
+                    if len(df) >= 100:
+                        print("🤖 Forcing ML predictions update...", flush=True)
+                        self.update_ml_predictions()
+                    else:
+                        print(f"⚠️ Need more data: {len(df)}/100 transactions in memory.csv", flush=True)
                     
-                except Exception as e:  # ✅ 12 spacji
-                    print(f"❌ Error reading memory.csv: {e}", flush=True)  # ✅ 16 spacji
-        else:  # ✅ 8 spacji
-            print(f"❌ Memory file not found: {MEMORY_FILE}", flush=True)  # ✅ 12 spacji
-    else:  # ✅ 4 spacje
-        print("⚠️ ML integration not available", flush=True)  # ✅ 8 spacji
+                except Exception as e:
+                    print(f"❌ Error reading memory.csv: {e}", flush=True)
+            else:
+                print(f"❌ Memory file not found: {MEMORY_FILE}", flush=True)
+        else:
+            print("⚠️ ML integration not available", flush=True)
         
         executed_in_cycle = 0
         
