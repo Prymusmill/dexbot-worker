@@ -98,7 +98,8 @@ class TradingBot:
             if os.path.exists(MEMORY_FILE):
                 df = pd.read_csv(MEMORY_FILE)
                 
-                if len(df) >= 100:  # Need minimum data for prediction
+                if len(df) >= 100:  # Zawsze sprawdzaj jeśli masz dane
+                    print("🤖 Forcing ML predictions update...", flush=True)
                     # Get ensemble prediction
                     prediction = self.ml_integration.get_ensemble_prediction(df.tail(200))
                     
@@ -209,12 +210,12 @@ class TradingBot:
                     
                     # ZMIANA: Aktualizuj ML predictions co 30 transakcji zamiast 90
                     if len(df) >= 100 and self.state["count"] % 30 == 0:
-                        print("🤖 Forcing ML predictions update...")
+                        print(f"🤖 Forcing ML predictions update...", flush=True)
                         self.update_ml_predictions()
                     elif len(df) < 100:
-                        print(f"⚠️ Need more data: {len(df)}/100 transactions in memory.csv")
+                        print(f"⚠️ Need more data: {len(df)}/100 transactions in memory.csv", flush=True)
                     else:
-                        print(f"⏳ Next ML update at trade: {((self.state['count'] // 30) + 1) * 30}")
+                        print(f"⏳ Next ML update at trade: {((self.state['count'] // 30) + 1) * 30}", flush=True)
                         
                 except Exception as e:
                     print(f"❌ Error reading memory.csv: {e}")
@@ -545,9 +546,9 @@ class TradingBot:
                 time.sleep(60)
                 
         except KeyboardInterrupt:
-            print("\n🛑 Zatrzymano przez użytkownika")
+            print("\n🛑 Zatrzymano przez użytkownika", flush=True)
         except Exception as e:
-            print(f"\n💥 Nieoczekiwany błąd: {e}")
+            print(f"\n💥 Nieoczekiwany błąd: {e}", flush=True)
             import traceback
             traceback.print_exc()
         finally:
@@ -557,18 +558,23 @@ class TradingBot:
             
             # Zapisz stan na koniec
             if self.save_state():
-                print(f"💾 Końcowy zapis stanu: {self.state['count']} transakcji")
+                print(f"💾 Końcowy zapis stanu: {self.state['count']} transakcji", flush=True)
             
             # Final system status
             try:
                 final_status = self.get_system_status()
-                print(f"\n🏁 Worker zakończony:")
-                print(f"   • Łączna liczba transakcji: {final_status['total_trades']:,}")
+                print(f"\n🏁 Worker zakończony:", flush=True)
+                print(f"   • Łączna liczba transakcji: {final_status['total_trades']:,}", flush=True)
                 if final_status['ml_available']:
-                    print(f"   • ML predictions wygenerowanych: {final_status['ml_predictions_count']}")
-                print(f"   • Ostatnia cena SOL: ${final_status['latest_price']:.4f}")
+                    print(f"   • ML predictions wygenerowanych: {final_status['ml_predictions_count']}", flush=True)
+                print(f"   • Ostatnia cena SOL: ${final_status['latest_price']:.4f}", flush=True)
+                
+                # Final file status check
+                print(f"\n📁 Final File Status:", flush=True)
+                self.check_file_status()
+                
             except Exception as e:
-                print(f"🏁 Worker zakończony (status error: {e})")
+                print(f"🏁 Worker zakończony (status error: {e})", flush=True)
 
 if __name__ == "__main__":
     bot = TradingBot()
