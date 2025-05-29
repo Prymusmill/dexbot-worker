@@ -749,8 +749,8 @@ class MLTradingIntegration:
             self.training_in_progress = False
 
     def get_ensemble_prediction(self, recent_data: pd.DataFrame) -> Dict:
-    """Get enhanced ensemble prediction using ALL available data"""
-    # Auto-train if no models - use ALL historical data
+        """Get enhanced ensemble prediction using ALL available data"""
+        # Auto-train if no models - use ALL historical data
         if not self.ensemble_model.is_trained:
             self.logger.info("🤖 Auto-training with ALL historical data...")
         
