@@ -3,6 +3,17 @@ import os
 from typing import Dict, List, Optional
 import json
 from datetime import datetime
+import json
+from datetime import datetime
+
+def safe_json_dumps(data):
+    """Safely serialize data to JSON, handling datetime objects"""
+    def datetime_handler(obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+    
+    return json.dumps(data, default=datetime_handler, indent=2)
 
 class GPTTradingAnalyzer:
     def __init__(self):
@@ -21,7 +32,7 @@ class GPTTradingAnalyzer:
             prompt = f"""
             Analyze this trading data and provide recommendations:
             
-            Market Data: {json.dumps(market_data, indent=2)}
+            Market Data: {safe_json_dumps(market_data)}
             
             Provide analysis in JSON format:
             {{
@@ -68,19 +79,19 @@ class GPTTradingAnalyzer:
             prompt_parts = [
                 "Analyze this comprehensive trading scenario and provide detailed recommendations:",
                 "",
-                f"Current Market Data: {json.dumps(market_data, indent=2)}",
+                f"Current Market Data: {safe_json_dumps(market_data)}"
             ]
             
             if ml_predictions:
                 prompt_parts.extend([
                     "",
-                    f"ML Model Predictions: {json.dumps(ml_predictions, indent=2)}"
+                    f"ML Model Predictions: {safe_json_dumps(ml_predictions)}"
                 ])
             
             if current_position:
                 prompt_parts.extend([
                     "",
-                    f"Current Position: {json.dumps(current_position, indent=2)}"
+                    f"Current Position: {safe_json_dumps(current_position)}"
                 ])
             
             prompt_parts.extend([

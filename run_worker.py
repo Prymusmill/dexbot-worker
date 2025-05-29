@@ -92,7 +92,7 @@ class OptimizedTradingBot:
             try:
                 self.gpt_analyzer = setup_gpt_enhanced_trading()
                 print("🤖 GPT-enhanced ML system initialized")
-                self.gpt_enabled = True
+                self.gpt_enabled = False
             except Exception as e:
                 print(f"⚠️ GPT initialization failed: {e}")
                 self.gpt_analyzer = None
