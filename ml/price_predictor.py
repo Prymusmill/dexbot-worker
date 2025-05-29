@@ -675,19 +675,100 @@ class MLTradingIntegration:
             
         finally:
             self.training_in_progress = False
+
+    def get_all_historical_data(self) -> pd.DataFrame:
+        """Get ALL historical data from PostgreSQL + CSV for ML training"""
+        try:
+            from database.db_manager import get_db_manager
+
+            # Try PostgreSQL first
+            try:
+                db_manager = get_db_manager()
+                df = db_manager.get_all_transactions_for_ml()
+                
+                if len(df) > 100:
+                    self.logger.info(f"✅ Loaded {len(df)} transactions from PostgreSQL for ML")
+                    return df
+                else:
+                    self.logger.warning(f"⚠️ PostgreSQL has only {len(df)} transactions")
+            except Exception as e:
+                self.logger.error(f"❌ PostgreSQL error: {e}")
+            
+            # Fallback to CSV
+            try:
+                import os
+                csv_path = "data/memory.csv"
+                if os.path.exists(csv_path):
+                    df = pd.read_csv(csv_path)
+                    if len(df) > 50:
+                        self.logger.info(f"✅ Loaded {len(df)} transactions from CSV for ML")
+                        return df
+                    else:
+                        self.logger.warning(f"⚠️ CSV has only {len(df)} transactions")
+            except Exception as e:
+                self.logger.error(f"❌ CSV error: {e}")
+            
+            self.logger.error("❌ No historical data available for ML training")
+            return pd.DataFrame()
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error loading historical data: {e}")
+            return pd.DataFrame()
     
+    def train_models_with_all_data(self):
+        """ENHANCED: Train models using ALL available historical data"""
+        if self.training_in_progress:
+            return {'success': False, 'error': 'Training already in progress'}
+        
+        try:
+            self.training_in_progress = True
+            
+            # Get ALL historical data
+            all_data = self.get_all_historical_data()
+            
+            if len(all_data) < 100:
+                return {'success': False, 'error': f'Insufficient historical data: {len(all_data)} (need 100+)'}
+            
+            self.logger.info(f"🤖 Starting enhanced training with {len(all_data)} historical samples...")
+            
+            # Train with all historical data
+            result = self.ensemble_model.train_ensemble_models(all_data)
+            
+            if result.get('success'):
+                self.last_training_time = datetime.now()
+                self.logger.info("✅ Enhanced training with ALL historical data completed!")
+                
+                # Save models
+                self.ensemble_model.save_ensemble_models()
+            else:
+                self.logger.error(f"❌ Enhanced training failed: {result.get('error')}")
+            
+            return result
+            
+        finally:
+            self.training_in_progress = False
+
     def get_ensemble_prediction(self, recent_data: pd.DataFrame) -> Dict:
-        """Get enhanced ensemble prediction"""
-        # Auto-train if no models or insufficient data
-        if not self.ensemble_model.is_trained and len(recent_data) >= 100:
-            self.logger.info("🤖 Auto-training ensemble models...")
-            training_result = self.train_models(recent_data)
-            if not training_result.get('success'):
-                return {'error': f'Auto-training failed: {training_result.get("error")}'}
-        
+    """Get enhanced ensemble prediction using ALL available data"""
+    # Auto-train if no models - use ALL historical data
         if not self.ensemble_model.is_trained:
-            return {'error': f'No trained models (need 100+ samples, have {len(recent_data)})'}
+            self.logger.info("🤖 Auto-training with ALL historical data...")
         
+        # Try training with ALL data first
+        training_result = self.train_models_with_all_data()
+        
+            if not training_result.get('success'):
+                # Fallback to recent data only
+                if len(recent_data) >= 100:
+                    self.logger.info("🤖 Fallback: training with recent data only...")
+                    training_result = self.train_models(recent_data)
+            
+                if not training_result.get('success'):
+                    return {'error': f'Auto-training failed: {training_result.get("error")}'}
+    
+        if not self.ensemble_model.is_trained:
+            return {'error': f'No trained models available'}
+    
         return self.ensemble_model.predict_ensemble(recent_data)
     
     def get_ensemble_prediction_with_reality_check(self, recent_data: pd.DataFrame) -> Dict:
@@ -805,3 +886,75 @@ class MLTradingIntegration:
     def get_feature_importance(self) -> Dict:
         """Get feature importance from ensemble models"""
         return self.ensemble_model.feature_importance
+
+    def get_all_historical_data(self) -> pd.DataFrame:
+        """Get ALL historical data from PostgreSQL + CSV for ML training"""
+        try:
+            from database.db_manager import get_db_manager
+            
+            # Try PostgreSQL first
+            try:
+                db_manager = get_db_manager()
+                df = db_manager.get_all_transactions_for_ml()
+                
+                if len(df) > 100:
+                    self.logger.info(f"✅ Loaded {len(df)} transactions from PostgreSQL for ML")
+                    return df
+                else:
+                    self.logger.warning(f"⚠️ PostgreSQL has only {len(df)} transactions")
+            except Exception as e:
+                self.logger.error(f"❌ PostgreSQL error: {e}")
+            
+            # Fallback to CSV
+            try:
+                import os
+                csv_path = "data/memory.csv"
+                if os.path.exists(csv_path):
+                    df = pd.read_csv(csv_path)
+                    if len(df) > 50:
+                        self.logger.info(f"✅ Loaded {len(df)} transactions from CSV for ML")
+                        return df
+                    else:
+                        self.logger.warning(f"⚠️ CSV has only {len(df)} transactions")
+            except Exception as e:
+                self.logger.error(f"❌ CSV error: {e}")
+            
+            self.logger.error("❌ No historical data available for ML training")
+            return pd.DataFrame()
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error loading historical data: {e}")
+            return pd.DataFrame()
+    
+    def train_models_with_all_data(self):
+        """ENHANCED: Train models using ALL available historical data"""
+        if self.training_in_progress:
+            return {'success': False, 'error': 'Training already in progress'}
+        
+        try:
+            self.training_in_progress = True
+            
+            # Get ALL historical data
+            all_data = self.get_all_historical_data()
+            
+            if len(all_data) < 100:
+                return {'success': False, 'error': f'Insufficient historical data: {len(all_data)} (need 100+)'}
+            
+            self.logger.info(f"🤖 Starting enhanced training with {len(all_data)} historical samples...")
+            
+            # Train with all historical data
+            result = self.ensemble_model.train_ensemble_models(all_data)
+            
+            if result.get('success'):
+                self.last_training_time = datetime.now()
+                self.logger.info("✅ Enhanced training with ALL historical data completed!")
+                
+                # Save models
+                self.ensemble_model.save_ensemble_models()
+            else:
+                self.logger.error(f"❌ Enhanced training failed: {result.get('error')}")
+            
+            return result
+            
+        finally:
+            self.training_in_progress = False

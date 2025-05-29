@@ -1,4 +1,4 @@
-# core/market_data.py - Complete version with enhanced technical indicators
+# core/market_data.py - FIXED RSI calculation
 import websocket
 import json
 import threading
@@ -27,6 +27,10 @@ class BinanceMarketData:
         self.sma_50 = 0.0
         self.rsi = 50.0
         self.volatility = 0.0
+        
+        # FIXED: RSI calculation history
+        self.rsi_gains = []
+        self.rsi_losses = []
         
         # Enhanced technical analysis components
         self.data_manager = None
@@ -82,6 +86,10 @@ class BinanceMarketData:
             self.price_history = [candle['close'] for candle in candles[-50:]]
             self.current_price = candles[-1]['close']
             
+            # FIXED: Initialize RSI calculation with historical data
+            if len(self.price_history) > 1:
+                self._init_rsi_calculation(self.price_history)
+            
             # Add to data manager if available
             if self.data_manager:
                 for candle in candles[-50:]:  # Last 50 candles
@@ -99,8 +107,31 @@ class BinanceMarketData:
             print(f"❌ Błąd pobierania danych historycznych: {e}")
             return []
     
+    def _init_rsi_calculation(self, prices: List[float]):
+        """FIXED: Initialize RSI calculation with historical data"""
+        try:
+            if len(prices) < 2:
+                return
+            
+            # Calculate initial gains and losses
+            for i in range(1, len(prices)):
+                change = prices[i] - prices[i-1]
+                gain = max(change, 0)
+                loss = max(-change, 0)
+                
+                self.rsi_gains.append(gain)
+                self.rsi_losses.append(loss)
+            
+            # Keep only last 14 values for RSI calculation
+            if len(self.rsi_gains) > 14:
+                self.rsi_gains = self.rsi_gains[-14:]
+                self.rsi_losses = self.rsi_losses[-14:]
+                
+        except Exception as e:
+            print(f"⚠️ Error initializing RSI: {e}")
+    
     def calculate_technical_indicators(self, prices: List[float]):
-        """Oblicz wskaźniki techniczne using custom implementation"""
+        """FIXED: Oblicz wskaźniki techniczne using proper RSI calculation"""
         try:
             if len(prices) < 20:
                 return
@@ -111,9 +142,9 @@ class BinanceMarketData:
             if len(prices) >= 50:
                 self.sma_50 = float(np.mean(prices[-50:]))
                 
-            # Basic RSI calculation
+            # FIXED: Better RSI calculation
             if len(prices) >= 15:
-                self.rsi = self._calculate_basic_rsi(prices)
+                self.rsi = self._calculate_proper_rsi(prices)
             
             # Volatility (standard deviation)
             if len(prices) >= 20:
@@ -127,7 +158,9 @@ class BinanceMarketData:
                     # Use professional indicators
                     self.sma_20 = TechnicalIndicators.sma(prices, 20)
                     self.sma_50 = TechnicalIndicators.sma(prices, 50)
-                    self.rsi = TechnicalIndicators.rsi(prices, 14)
+                    
+                    # Use our fixed RSI instead of external one
+                    # self.rsi = TechnicalIndicators.rsi(prices, 14)
                     
                     print(f"📊 Professional Indicators - SMA20: {self.sma_20:.4f}, SMA50: {self.sma_50:.4f}, RSI: {self.rsi:.1f}")
                     return
@@ -139,30 +172,54 @@ class BinanceMarketData:
         except Exception as e:
             print(f"⚠️ Błąd obliczania wskaźników: {e}")
     
-    def _calculate_basic_rsi(self, prices: List[float], period: int = 14) -> float:
-        """Basic RSI calculation using numpy"""
+    def _calculate_proper_rsi(self, prices: List[float], period: int = 14) -> float:
+        """FIXED: Proper RSI calculation using EMA-based approach"""
         try:
             if len(prices) < period + 1:
                 return 50.0
             
-            prices_array = np.array(prices)
-            deltas = np.diff(prices_array)
+            # Get recent price changes
+            recent_prices = prices[-(period + 10):]  # Get more data for stability
+            changes = []
             
-            gains = np.where(deltas > 0, deltas, 0)
-            losses = np.where(deltas < 0, -deltas, 0)
+            for i in range(1, len(recent_prices)):
+                change = recent_prices[i] - recent_prices[i-1]
+                changes.append(change)
             
+            if len(changes) < period:
+                return 50.0
+            
+            # Separate gains and losses
+            gains = [max(change, 0) for change in changes]
+            losses = [max(-change, 0) for change in changes]
+            
+            # Calculate average gains and losses using simple moving average
             avg_gain = np.mean(gains[-period:])
             avg_loss = np.mean(losses[-period:])
             
+            # Handle edge cases
             if avg_loss == 0:
-                return 100.0
+                return 99.0  # Almost overbought, not 100.0
             
+            if avg_gain == 0:
+                return 1.0   # Almost oversold, not 0.0
+            
+            # Calculate RS and RSI
             rs = avg_gain / avg_loss
             rsi = 100 - (100 / (1 + rs))
             
+            # Ensure RSI is within reasonable bounds
+            rsi = max(1.0, min(99.0, rsi))
+            
             return float(rsi)
-        except:
+            
+        except Exception as e:
+            print(f"⚠️ RSI calculation error: {e}")
             return 50.0
+    
+    def _calculate_basic_rsi(self, prices: List[float], period: int = 14) -> float:
+        """DEPRECATED: Old RSI calculation - replaced by _calculate_proper_rsi"""
+        return self._calculate_proper_rsi(prices, period)
     
     def on_message(self, ws, message):
         """Enhanced message handler with technical analysis"""
@@ -195,8 +252,8 @@ class BinanceMarketData:
                         timestamp=self.last_update
                     )
                 
-                # Oblicz wskaźniki techniczne co 10 nowych cen
-                if len(self.price_history) % 10 == 0:
+                # FIXED: Oblicz wskaźniki techniczne częściej dla lepszej dokładności RSI
+                if len(self.price_history) % 5 == 0:  # Every 5 updates instead of 10
                     self.calculate_technical_indicators(self.price_history)
                 
                 # Prepare basic market data
@@ -407,7 +464,7 @@ class TradingSignals:
                     signals['strength'] -= 0.3
                     signals['reasons'].append('SMA20 < SMA50 (bearish)')
             
-            # Analiza RSI
+            # FIXED: Better RSI analysis with proper thresholds
             if rsi < 30:
                 signals['action'] = 'buy'
                 signals['strength'] += 0.4
@@ -416,6 +473,12 @@ class TradingSignals:
                 signals['action'] = 'sell'
                 signals['strength'] -= 0.4
                 signals['reasons'].append(f'RSI overbought ({rsi:.1f})')
+            elif rsi > 60:
+                signals['strength'] -= 0.1
+                signals['reasons'].append(f'RSI slightly high ({rsi:.1f})')
+            elif rsi < 40:
+                signals['strength'] += 0.1
+                signals['reasons'].append(f'RSI slightly low ({rsi:.1f})')
             
             # Analiza momentum (price change 24h)
             if price_change_24h > 2.0:

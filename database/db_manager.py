@@ -159,13 +159,13 @@ class DatabaseManager:
             return pd.DataFrame()
     
     def get_all_transactions_for_ml(self) -> pd.DataFrame:
-        """Get all transactions formatted for ML training"""
+        """Get ALL transactions formatted for ML training - ENHANCED"""
         try:
             query = """
                 SELECT timestamp, price, volume, rsi, amount_in, amount_out,
-                       price_impact, profitable
+                       price_impact, profitable, input_token, output_token
                 FROM transactions 
-                WHERE price IS NOT NULL AND rsi IS NOT NULL
+                WHERE price IS NOT NULL AND price > 0 AND rsi IS NOT NULL
                 ORDER BY timestamp ASC;
             """
             
@@ -173,14 +173,14 @@ class DatabaseManager:
             
             if len(df) > 0:
                 df['timestamp'] = pd.to_datetime(df['timestamp'])
-                print(f"✅ Retrieved {len(df)} transactions for ML training")
+                print(f"✅ Retrieved {len(df)} ALL transactions for ML training")
             else:
-                print("⚠️ No valid transactions for ML training")
+                print("⚠️ No transactions found for ML training")
             
             return df
             
         except Exception as e:
-            print(f"❌ Error retrieving ML training data: {e}")
+            print(f"❌ Error retrieving ALL ML training data: {e}")
             return pd.DataFrame()
     
     def save_ml_model_info(self, model_info: Dict):
