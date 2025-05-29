@@ -1,4 +1,4 @@
-# ml/price_predictor.py - COMPLETE FIXED VERSION with Reality Check
+# ml/price_predictor.py - COMPLETE FIXED VERSION with Reality Check + Logging Integration
 import numpy as np
 import pandas as pd
 import joblib
@@ -13,6 +13,9 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.model_selection import GridSearchCV
 import warnings
 warnings.filterwarnings('ignore')
+
+# Ustawienie podstawowego poziomu logowania
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 class OptimizedPricePredictionModel:
     """
@@ -84,7 +87,7 @@ class OptimizedPricePredictionModel:
     def prepare_advanced_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """FIXED: Advanced feature engineering with proper error handling"""
         try:
-            print(f"🔍 Advanced feature preparation with {len(df)} rows")
+            self.logger.info(f"🔍 Advanced feature preparation with {len(df)} rows")
             
             df = df.copy().sort_values('timestamp')
             
@@ -95,7 +98,7 @@ class OptimizedPricePredictionModel:
                 df['price'] = pd.to_numeric(df['amount_out'], errors='coerce')
                 price_col = 'price'
             else:
-                print("❌ No valid price column found")
+                self.logger.error("❌ No valid price column found")
                 return pd.DataFrame()
             
             # Clean price data
@@ -103,7 +106,7 @@ class OptimizedPricePredictionModel:
             df = df.dropna(subset=[price_col])
             
             if len(df) < 30:
-                print(f"❌ Insufficient data after cleaning: {len(df)}")
+                self.logger.error(f"❌ Insufficient data after cleaning: {len(df)}")
                 return pd.DataFrame()
             
             # === PRICE FEATURES ===
@@ -264,10 +267,10 @@ class OptimizedPricePredictionModel:
                 if col in df.columns and not df[col].isna().all() and not np.isinf(df[col]).all():
                     available_features.append(col)
             
-            print(f"📋 Available features after filtering: {len(available_features)}")
+            self.logger.info(f"📋 Available features after filtering: {len(available_features)}")
             
             if len(available_features) < 8:
-                print(f"❌ Too few valid features: {len(available_features)}")
+                self.logger.error(f"❌ Too few valid features: {len(available_features)}")
                 return pd.DataFrame()
             
             # Clean data
@@ -292,19 +295,19 @@ class OptimizedPricePredictionModel:
             final_clean = df.dropna(subset=['target'])
             
             if len(final_clean) < 20:
-                print(f"❌ Too few samples after cleaning: {len(final_clean)}")
+                self.logger.error(f"❌ Too few samples after cleaning: {len(final_clean)}")
                 return pd.DataFrame()
             
             result_df = final_clean[available_features + ['target']].copy()
             
-            print(f"✅ Advanced features prepared: {result_df.shape}")
-            print(f"   Features: {len(available_features)}")
-            print(f"   Samples: {len(result_df)}")
+            self.logger.info(f"✅ Advanced features prepared: {result_df.shape}")
+            self.logger.info(f"   Features: {len(available_features)}")
+            self.logger.info(f"   Samples: {len(result_df)}")
             
             return result_df
             
         except Exception as e:
-            print(f"❌ Advanced feature preparation failed: {e}")
+            self.logger.error(f"❌ Advanced feature preparation failed: {e}")
             import traceback
             traceback.print_exc()
             return pd.DataFrame()
@@ -323,7 +326,7 @@ class OptimizedPricePredictionModel:
             # Ensure RSI is within valid range
             return rsi.clip(0, 100)
         except Exception as e:
-            print(f"⚠️ RSI calculation error: {e}")
+            self.logger.warning(f"⚠️ RSI calculation error: {e}")
             return pd.Series([50.0] * len(prices), index=prices.index)
     
     def _calculate_macd_fixed(self, prices: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> Tuple[pd.Series, pd.Series]:
@@ -335,7 +338,7 @@ class OptimizedPricePredictionModel:
             macd_signal = macd_line.ewm(span=signal).mean()
             return macd_line.fillna(0), macd_signal.fillna(0)
         except Exception as e:
-            print(f"⚠️ MACD calculation error: {e}")
+            self.logger.warning(f"⚠️ MACD calculation error: {e}")
             zeros = pd.Series([0.0] * len(prices), index=prices.index)
             return zeros, zeros
     
@@ -355,14 +358,14 @@ class OptimizedPricePredictionModel:
             
             return stoch_k.fillna(50), stoch_d.fillna(50)
         except Exception as e:
-            print(f"⚠️ Stochastic calculation error: {e}")
+            self.logger.warning(f"⚠️ Stochastic calculation error: {e}")
             fifties = pd.Series([50.0] * len(prices), index=prices.index)
             return fifties, fifties
     
     def train_ensemble_models(self, df: pd.DataFrame, test_size: float = 0.2) -> Dict:
         """Train multiple models with hyperparameter optimization"""
         try:
-            print(f"🤖 Training ensemble models with {len(df)} samples...")
+            self.logger.info(f"🤖 Training ensemble models with {len(df)} samples...")
             
             # Prepare features
             df_features = self.prepare_advanced_features(df)
@@ -391,23 +394,23 @@ class OptimizedPricePredictionModel:
             X_train_scaled = self.feature_scaler.fit_transform(X_train)
             X_test_scaled = self.feature_scaler.transform(X_test)
             
-            print(f"📊 Training on {len(X_train)} samples, testing on {len(X_test)}")
+            self.logger.info(f"📊 Training on {len(X_train)} samples, testing on {len(X_test)}")
             
             # Train multiple models
             results = {}
             for model_name, config in self.model_configs.items():
                 try:
-                    print(f"🔄 Training {model_name}...")
+                    self.logger.info(f"🔄 Training {model_name}...")
                     
                     # Quick training for large datasets
                     if len(X_train) > 200:
-                        # Use simplified parameters for speed
+                        # Use simplified parameters for speed with n_jobs=-1
                         if model_name == 'random_forest':
-                            model = RandomForestRegressor(n_estimators=100, max_depth=10, random_state=42, n_jobs=1)
+                            model = RandomForestRegressor(n_estimators=100, max_depth=10, random_state=42, n_jobs=-1)
                         elif model_name == 'gradient_boost':
                             model = GradientBoostingRegressor(n_estimators=100, max_depth=6, learning_rate=0.1, random_state=42)
                         elif model_name == 'extra_trees':
-                            model = ExtraTreesRegressor(n_estimators=100, max_depth=10, random_state=42, n_jobs=1)
+                            model = ExtraTreesRegressor(n_estimators=100, max_depth=10, random_state=42, n_jobs=-1)
                         elif model_name == 'ridge':
                             model = Ridge(alpha=1.0)
                         elif model_name == 'elastic_net':
@@ -420,7 +423,7 @@ class OptimizedPricePredictionModel:
                         for param, values in config['params'].items():
                             simplified_params[param] = values[:2]  # Take only first 2 values
                         
-                        model = GridSearchCV(base_model, simplified_params, cv=3, scoring='neg_mean_squared_error', n_jobs=1)
+                        model = GridSearchCV(base_model, simplified_params, cv=3, scoring='neg_mean_squared_error', n_jobs=-1)
                     
                     # Train model
                     model.fit(X_train_scaled, y_train)
@@ -471,10 +474,10 @@ class OptimizedPricePredictionModel:
                         'test_mae': test_mae
                     }
                     
-                    print(f"✅ {model_name}: R²={test_r2:.3f}, Acc={accuracy:.1f}%, MAE={test_mae:.6f}")
+                    self.logger.info(f"✅ {model_name}: R²={test_r2:.3f}, Acc={accuracy:.1f}%, MAE={test_mae:.6f}")
                     
                 except Exception as e:
-                    print(f"❌ {model_name} training failed: {e}")
+                    self.logger.error(f"❌ {model_name} training failed: {e}")
                     results[model_name] = {'success': False, 'error': str(e)}
             
             # Calculate ensemble weights based on performance
@@ -484,15 +487,15 @@ class OptimizedPricePredictionModel:
             successful_models = [name for name, result in results.items() if result.get('success')]
             if successful_models:
                 self.is_trained = True
-                print(f"✅ Ensemble training complete! Successful models: {successful_models}")
+                self.logger.info(f"✅ Ensemble training complete! Successful models: {successful_models}")
             else:
-                print("❌ All models failed to train")
+                self.logger.error("❌ All models failed to train")
                 return {'success': False, 'error': 'All models failed'}
             
             return {'success': True, 'results': results, 'successful_models': successful_models}
             
         except Exception as e:
-            print(f"❌ Ensemble training error: {e}")
+            self.logger.error(f"❌ Ensemble training error: {e}")
             import traceback
             traceback.print_exc()
             return {'success': False, 'error': str(e)}
@@ -518,7 +521,7 @@ class OptimizedPricePredictionModel:
                 weights[model_name] /= total_score
         
         self.ensemble_weights = weights
-        print(f"📊 Ensemble weights: {self.ensemble_weights}")
+        self.logger.info(f"📊 Ensemble weights: {self.ensemble_weights}")
     
     def predict_ensemble(self, recent_data: pd.DataFrame) -> Dict:
         """Make ensemble prediction using all trained models"""
@@ -545,7 +548,7 @@ class OptimizedPricePredictionModel:
                     pred = model.predict(latest_features_scaled)[0]
                     predictions[model_name] = float(pred)
                 except Exception as e:
-                    print(f"⚠️ {model_name} prediction failed: {e}")
+                    self.logger.warning(f"⚠️ {model_name} prediction failed: {e}")
             
             if not predictions:
                 return {'error': 'No valid predictions generated'}
@@ -595,13 +598,13 @@ class OptimizedPricePredictionModel:
                 'features_used': len(feature_cols)
             }
             
-            print(f"🎯 Ensemble: {direction.upper()} ${ensemble_prediction:.4f} "
-                  f"(confidence: {final_confidence:.2f}, agreement: {model_agreement:.2f})")
+            self.logger.info(f"🎯 Ensemble: {direction.upper()} ${ensemble_prediction:.4f} "
+                           f"(confidence: {final_confidence:.2f}, agreement: {model_agreement:.2f})")
             
             return result
             
         except Exception as e:
-            print(f"❌ Ensemble prediction error: {e}")
+            self.logger.error(f"❌ Ensemble prediction error: {e}")
             return {'error': str(e)}
     
     def _calculate_model_agreement(self, predictions: Dict, current_price: float) -> float:
@@ -632,11 +635,11 @@ class OptimizedPricePredictionModel:
             }
             
             joblib.dump(metadata, f"ml/models/ensemble_metadata_{timestamp}.pkl")
-            print(f"✅ Ensemble models saved: {timestamp}")
+            self.logger.info(f"✅ Ensemble models saved: {timestamp}")
             return True
             
         except Exception as e:
-            print(f"❌ Error saving ensemble models: {e}")
+            self.logger.error(f"❌ Error saving ensemble models: {e}")
             return False
 
 class MLTradingIntegration:
@@ -646,6 +649,7 @@ class MLTradingIntegration:
         self.ensemble_model = OptimizedPricePredictionModel('ensemble')
         self.last_training_time = None
         self.training_in_progress = False
+        self.logger = logging.getLogger(__name__)
         
     def train_models(self, df: pd.DataFrame):
         """Train ensemble models"""
@@ -654,18 +658,18 @@ class MLTradingIntegration:
         
         try:
             self.training_in_progress = True
-            print(f"🤖 Starting ensemble training with {len(df)} samples...")
+            self.logger.info(f"🤖 Starting ensemble training with {len(df)} samples...")
             
             result = self.ensemble_model.train_ensemble_models(df)
             
             if result.get('success'):
                 self.last_training_time = datetime.now()
-                print("✅ Ensemble training completed successfully!")
+                self.logger.info("✅ Ensemble training completed successfully!")
                 
                 # Save models
                 self.ensemble_model.save_ensemble_models()
             else:
-                print(f"❌ Ensemble training failed: {result.get('error')}")
+                self.logger.error(f"❌ Ensemble training failed: {result.get('error')}")
             
             return result
             
@@ -676,7 +680,7 @@ class MLTradingIntegration:
         """Get enhanced ensemble prediction"""
         # Auto-train if no models or insufficient data
         if not self.ensemble_model.is_trained and len(recent_data) >= 100:
-            print("🤖 Auto-training ensemble models...")
+            self.logger.info("🤖 Auto-training ensemble models...")
             training_result = self.train_models(recent_data)
             if not training_result.get('success'):
                 return {'error': f'Auto-training failed: {training_result.get("error")}'}
@@ -709,7 +713,7 @@ class MLTradingIntegration:
                 min_accuracy = settings.get('model_accuracy_threshold', 0.4) * 100
                 
                 if avg_accuracy < min_accuracy:
-                    print(f"🛑 Reality Check: Model accuracy too low ({avg_accuracy:.1f}% < {min_accuracy:.1f}%)")
+                    self.logger.warning(f"🛑 Reality Check: Model accuracy too low ({avg_accuracy:.1f}% < {min_accuracy:.1f}%)")
                     base_prediction['confidence'] = min(base_prediction.get('confidence', 0.5), 0.3)
                     base_prediction['reality_check'] = f'Low model accuracy: {avg_accuracy:.1f}%'
             
@@ -726,20 +730,20 @@ class MLTradingIntegration:
                     confidence_penalty = 0.3
                     base_prediction['confidence'] *= (1 - confidence_penalty)
                     base_prediction['reality_check'] = f'Overbought market (RSI: {current_rsi:.1f})'
-                    print(f"⚠️ Reality Check: Overbought market RSI {current_rsi:.1f}, confidence reduced")
+                    self.logger.warning(f"⚠️ Reality Check: Overbought market RSI {current_rsi:.1f}, confidence reduced")
                     
                 elif current_rsi < rsi_oversold:
                     confidence_penalty = 0.3  
                     base_prediction['confidence'] *= (1 - confidence_penalty)
                     base_prediction['reality_check'] = f'Oversold market (RSI: {current_rsi:.1f})'
-                    print(f"⚠️ Reality Check: Oversold market RSI {current_rsi:.1f}, confidence reduced")
+                    self.logger.warning(f"⚠️ Reality Check: Oversold market RSI {current_rsi:.1f}, confidence reduced")
             
             # REALITY CHECK 3: Confidence Capping
             max_confidence = settings.get('max_model_confidence', 0.8)
             if base_prediction.get('confidence', 0) > max_confidence:
                 original_confidence = base_prediction['confidence']
                 base_prediction['confidence'] = max_confidence
-                print(f"🎯 Reality Check: Capped confidence {original_confidence:.2f} → {max_confidence:.2f}")
+                self.logger.info(f"🎯 Reality Check: Capped confidence {original_confidence:.2f} → {max_confidence:.2f}")
             
             # REALITY CHECK 4: Model Agreement vs Performance
             model_agreement = base_prediction.get('model_agreement', 0.5)
@@ -751,13 +755,13 @@ class MLTradingIntegration:
                     confidence_reduction = 0.4
                     base_prediction['confidence'] *= (1 - confidence_reduction)
                     base_prediction['reality_check'] = f'High agreement but poor track record (acc: {avg_accuracy:.1f}%)'
-                    print(f"🔍 Reality Check: High agreement but poor performance, confidence reduced")
+                    self.logger.warning(f"🔍 Reality Check: High agreement but poor performance, confidence reduced")
             
             # REALITY CHECK 5: Recent Performance Integration
             if base_prediction.get('confidence', 0) > 0.9:
                 # Very high confidence should be rare and well-justified
                 base_prediction['confidence'] = 0.85  # Cap at 85%
-                print(f"🛡️ Reality Check: Extreme confidence capped at 85%")
+                self.logger.info(f"🛡️ Reality Check: Extreme confidence capped at 85%")
             
             # Add reality check metadata
             base_prediction['reality_checked'] = True
@@ -766,7 +770,7 @@ class MLTradingIntegration:
             return base_prediction
             
         except Exception as e:
-            print(f"⚠️ Reality check error: {e}")
+            self.logger.error(f"⚠️ Reality check error: {e}")
             # Return original prediction if reality check fails
             base_prediction['reality_checked'] = False
             return base_prediction
