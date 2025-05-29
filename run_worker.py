@@ -1,4 +1,6 @@
 # run_worker.py - FIXED COMPLETE VERSION with GPT integration
+from dotenv import load_dotenv 
+load_dotenv()
 import os
 import sys
 import time
