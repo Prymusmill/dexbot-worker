@@ -1,4 +1,4 @@
-# run_worker.py - FIXED COMPLETE VERSION with random import
+# run_worker.py - FIXED COMPLETE VERSION with GPT integration
 import os
 import sys
 import time
@@ -22,6 +22,15 @@ try:
 except ImportError as e:
     print(f"❌ Import error: {e}")
     sys.exit(1)
+
+# GPT Analyzer import
+try:
+    from ml.gpt_analyzer import setup_gpt_enhanced_trading, format_gpt_analysis_for_logging
+    GPT_AVAILABLE = True
+    print("✅ GPT analyzer available")
+except ImportError as e:
+    print(f"⚠️ GPT analyzer not available: {e}")
+    GPT_AVAILABLE = False
 
 # Enhanced ML Integration
 ML_AVAILABLE = False
@@ -50,6 +59,11 @@ class OptimizedTradingBot:
         self.last_ml_training = None
         self.ml_performance_history = []
         
+        # GPT attributes
+        self.gpt_analysis_count = 0
+        self.gpt_successful_predictions = 0
+        self.last_gpt_analysis = None
+        
         # Adaptive trading attributes
         self.current_confidence = 0.5
         self.market_volatility = 0.01
@@ -70,6 +84,20 @@ class OptimizedTradingBot:
                 self.ml_integration = None
         else:
             self.ml_integration = None
+
+        # Initialize GPT analyzer
+        if GPT_AVAILABLE:
+            try:
+                self.gpt_analyzer = setup_gpt_enhanced_trading()
+                print("🤖 GPT-enhanced ML system initialized")
+                self.gpt_enabled = True
+            except Exception as e:
+                print(f"⚠️ GPT initialization failed: {e}")
+                self.gpt_analyzer = None
+                self.gpt_enabled = False
+        else:
+            self.gpt_analyzer = None
+            self.gpt_enabled = False
             
     def on_market_data_update(self, market_data: Dict):
         """Enhanced callback with volatility tracking"""
@@ -103,11 +131,18 @@ class OptimizedTradingBot:
             agreement = self.ml_predictions.get('model_agreement', 0)
             ml_info = f", ML: {direction.upper()} ({confidence:.2f} conf, {agreement:.2f} agree)"
         
+        # GPT insights
+        gpt_info = ""
+        if self.last_gpt_analysis:
+            gpt_action = self.last_gpt_analysis.get('action', 'UNKNOWN')
+            gpt_confidence = self.last_gpt_analysis.get('confidence', 0)
+            gpt_info = f", GPT: {gpt_action} ({gpt_confidence:.2f})"
+        
         # Adaptive info
         adaptive_info = f", Adaptive: {self.adaptive_cycle_size} trades/{self.adaptive_delay}s"
         
         print(f"📊 Market: SOL/USDC ${price:.4f}, RSI: {rsi:.1f}, Vol: {volatility:.4f}, "
-              f"24h: {trend}{ml_info}{adaptive_info}")
+              f"24h: {trend}{ml_info}{gpt_info}{adaptive_info}")
     
     def update_ml_predictions(self):
         """Enhanced ML predictions with ensemble"""
@@ -182,6 +217,162 @@ class OptimizedTradingBot:
         
         except Exception as e:
             print(f"❌ Enhanced retraining error: {e}")
+
+    def get_current_position(self, symbol='SOL/USDT'):
+        """Get current position for symbol"""
+        try:
+            # Implement based on your exchange API
+            # This is placeholder - adapt to your setup
+            if hasattr(self.trade_executor, 'exchange') and self.trade_executor.exchange:
+                balance = self.trade_executor.exchange.fetch_balance()
+                position = balance.get(symbol.replace('/USDT', ''), {})
+                return {
+                    'symbol': symbol,
+                    'amount': position.get('total', 0),
+                    'value_usdt': position.get('total', 0) * self.latest_market_data.get('price', 0),
+                    'side': 'long' if position.get('total', 0) > 0 else None
+                }
+            return None
+        except Exception as e:
+            print(f"Position check error: {e}")
+            return None
+
+    def get_ml_predictions_for_gpt(self):
+        """Convert ML predictions to format suitable for GPT"""
+        ml_predictions = []
+        
+        if self.ml_predictions:
+            ml_predictions.append({
+                'model_name': 'ML_Ensemble',
+                'prediction': self.ml_predictions.get('direction', 'hold').upper(),
+                'confidence': self.ml_predictions.get('confidence', 0.5),
+                'reasoning': f"Ensemble prediction with {self.ml_predictions.get('model_count', 0)} models, agreement: {self.ml_predictions.get('model_agreement', 0):.2f}"
+            })
+        
+        return ml_predictions
+
+    def make_trading_decision_with_gpt(self):
+        """Enhanced trading decision with GPT analysis"""
+        try:
+            if not self.latest_market_data:
+                return None
+            
+            # Get ML predictions in GPT format
+            ml_predictions = self.get_ml_predictions_for_gpt()
+            
+            # GPT Analysis
+            gpt_analysis = None
+            if self.gpt_enabled and self.gpt_analyzer:
+                try:
+                    current_position = self.get_current_position()
+                    gpt_analysis = self.gpt_analyzer.analyze_market_signal(
+                        market_data=self.latest_market_data,
+                        ml_predictions=ml_predictions,
+                        current_position=current_position
+                    )
+                    
+                    self.gpt_analysis_count += 1
+                    self.last_gpt_analysis = gpt_analysis
+                    
+                    # Log GPT analysis
+                    if self.gpt_analysis_count % 3 == 1:  # Log every 3rd analysis
+                        print(format_gpt_analysis_for_logging(gpt_analysis))
+                    
+                except Exception as e:
+                    print(f"⚠️ GPT analysis failed: {e}")
+                    gpt_analysis = None
+            
+            # Combine ML and GPT decisions
+            final_decision = self._combine_ml_gpt_decisions(
+                ml_predictions, gpt_analysis, self.latest_market_data
+            )
+            
+            return final_decision
+            
+        except Exception as e:
+            print(f"❌ Trading decision error: {e}")
+            return None
+
+    def _combine_ml_gpt_decisions(self, ml_predictions, gpt_analysis, market_data):
+        """Combine ML models and GPT analysis into final decision"""
+        try:
+            # Default decision
+            decision = {
+                'action': 'HOLD',
+                'confidence': 0.5,
+                'reasoning': 'Default conservative approach',
+                'source': 'combined'
+            }
+            
+            # ML Consensus
+            ml_consensus = {'action': 'HOLD', 'confidence': 0.5}
+            if self.ml_predictions:
+                ml_direction = self.ml_predictions.get('direction', 'hold')
+                ml_confidence = self.ml_predictions.get('confidence', 0.5)
+                ml_consensus = {
+                    'action': ml_direction.upper(),
+                    'confidence': ml_confidence
+                }
+            
+            # GPT Analysis
+            if gpt_analysis and not gpt_analysis.get('error'):
+                gpt_action = gpt_analysis.get('action', 'HOLD')
+                gpt_confidence = gpt_analysis.get('confidence', 0.5)
+                gpt_risk = gpt_analysis.get('risk_level', 'MEDIUM')
+                
+                # Decision Logic
+                if ml_consensus['action'] == gpt_action:
+                    # Agreement between ML and GPT
+                    decision['action'] = gpt_action
+                    decision['confidence'] = min(0.9, (ml_consensus['confidence'] + gpt_confidence) / 2)
+                    decision['reasoning'] = f"ML-GPT consensus: {gpt_action}"
+                    
+                elif gpt_confidence > 0.8 and gpt_risk != 'HIGH':
+                    # High confidence GPT overrides ML
+                    decision['action'] = gpt_action
+                    decision['confidence'] = gpt_confidence * 0.9  # Slight discount
+                    decision['reasoning'] = f"High-confidence GPT: {gpt_analysis.get('reasoning', '')[:100]}"
+                    
+                elif ml_consensus['confidence'] > 0.7:
+                    # Strong ML consensus
+                    decision['action'] = ml_consensus['action']
+                    decision['confidence'] = ml_consensus['confidence'] * 0.8
+                    decision['reasoning'] = "Strong ML consensus overrides GPT"
+                    
+                else:
+                    # Conflicting signals - be conservative
+                    decision['action'] = 'HOLD'
+                    decision['confidence'] = 0.3
+                    decision['reasoning'] = "Conflicting ML-GPT signals, staying conservative"
+            
+            else:
+                # Only ML available
+                decision = {
+                    'action': ml_consensus['action'],
+                    'confidence': ml_consensus['confidence'],
+                    'reasoning': 'ML-only decision (GPT unavailable)',
+                    'source': 'ml_only'
+                }
+            
+            # Add metadata
+            decision['ml_predictions_count'] = len(ml_predictions)
+            decision['gpt_available'] = gpt_analysis is not None
+            decision['timestamp'] = market_data.get('timestamp', '')
+            
+            # Log final decision
+            if decision['confidence'] > 0.6 or decision['action'] != 'HOLD':
+                print(f"🎯 Final Decision: {decision['action']} (conf: {decision['confidence']:.2f}) - {decision['reasoning'][:50]}...")
+            
+            return decision
+            
+        except Exception as e:
+            print(f"❌ Decision combination error: {e}")
+            return {
+                'action': 'HOLD',
+                'confidence': 0.2,
+                'reasoning': f'Error in decision logic: {str(e)}',
+                'source': 'error_fallback'
+            }
     
     def calculate_adaptive_parameters(self) -> Dict:
         """Calculate adaptive trading parameters based on ML confidence and market conditions"""
@@ -197,6 +388,15 @@ class OptimizedTradingBot:
                 confidence_factor = settings.get("high_confidence_multiplier", 1.5)
             elif confidence < 0.3:
                 confidence_factor = settings.get("low_confidence_multiplier", 0.7)
+        
+        # GPT confidence factor
+        gpt_factor = 1.0
+        if self.last_gpt_analysis and not self.last_gpt_analysis.get('error'):
+            gpt_confidence = self.last_gpt_analysis.get('confidence', 0.5)
+            if gpt_confidence > 0.8:
+                gpt_factor = 1.2
+            elif gpt_confidence < 0.3:
+                gpt_factor = 0.8
         
         # Market volatility factor
         volatility_factor = 1.0
@@ -214,7 +414,7 @@ class OptimizedTradingBot:
                 performance_factor = 1.1
         
         # Calculate final parameters
-        final_factor = confidence_factor * volatility_factor * performance_factor
+        final_factor = confidence_factor * gpt_factor * volatility_factor * performance_factor
         
         self.adaptive_cycle_size = max(20, min(80, int(base_cycle_size * final_factor)))
         self.adaptive_delay = max(15, min(60, int(base_delay / final_factor)))
@@ -223,16 +423,49 @@ class OptimizedTradingBot:
             'cycle_size': self.adaptive_cycle_size,
             'delay': self.adaptive_delay,
             'confidence_factor': confidence_factor,
+            'gpt_factor': gpt_factor,
             'volatility_factor': volatility_factor,
             'performance_factor': performance_factor,
             'final_factor': final_factor
         }
     
     def should_execute_trade_enhanced(self) -> bool:
-        """Enhanced trading decision with ML integration"""
+        """Enhanced trading decision with ML and GPT integration"""
         if not self.latest_market_data:
             return True  # Fallback
         
+        # Get combined ML+GPT decision
+        trading_decision = self.make_trading_decision_with_gpt()
+        
+        if not trading_decision:
+            # Fallback to original logic
+            return self._should_execute_trade_original()
+        
+        # Use combined decision
+        action = trading_decision.get('action', 'HOLD')
+        confidence = trading_decision.get('confidence', 0.5)
+        
+        # Market volatility check
+        vol_threshold = settings.get("market_volatility_threshold", 0.05)
+        if self.market_volatility > vol_threshold:
+            confidence *= 0.8
+        
+        # Final decision with confidence threshold
+        ml_threshold = settings.get("ml_confidence_threshold", 0.3)
+        
+        if action == 'BUY' or action == 'SELL':
+            if confidence > 0.7:
+                return True
+            elif confidence > ml_threshold:
+                # Probabilistic execution based on confidence
+                return random.random() < confidence
+            else:
+                return random.random() < 0.3  # Low probability fallback
+        else:  # HOLD
+            return random.random() < 0.4  # Still some trading activity
+    
+    def _should_execute_trade_original(self) -> bool:
+        """Original trading decision logic as fallback"""
         # Base market signals
         signals = self.trading_signals.analyze_market_conditions(self.latest_market_data)
         base_confidence = signals.get('confidence', 0.5)
@@ -299,6 +532,8 @@ class OptimizedTradingBot:
         print(f"   • ML Confidence: {self.current_confidence:.2f}")
         print(f"   • Market Volatility: {self.market_volatility:.4f}")
         print(f"   • Confidence Factor: {adaptive_params['confidence_factor']:.2f}")
+        if self.gpt_enabled:
+            print(f"   • GPT Factor: {adaptive_params['gpt_factor']:.2f}")
         print(f"   • Final Factor: {adaptive_params['final_factor']:.2f}")
         
         # Update ML predictions
@@ -351,7 +586,7 @@ class OptimizedTradingBot:
               f"{profitable_in_cycle} profitable ({cycle_win_rate:.1%} cycle win rate)")
     
     def check_enhanced_status(self):
-        """Enhanced status checking with ML insights"""
+        """Enhanced status checking with ML and GPT insights"""
         # Get database status
         db_status = self.trade_executor.get_database_status()
         
@@ -383,6 +618,22 @@ class OptimizedTradingBot:
                     
             except Exception as e:
                 print(f"   • ML Status Error: {e}")
+        
+        # GPT Status
+        if self.gpt_enabled:
+            try:
+                gpt_stats = self.gpt_analyzer.get_performance_stats() if self.gpt_analyzer else {}
+                print(f"   • GPT Analyses: {self.gpt_analysis_count}")
+                print(f"   • GPT Success Rate: {gpt_stats.get('success_rate', 'N/A')}")
+                
+                if self.last_gpt_analysis:
+                    gpt_action = self.last_gpt_analysis.get('action', 'UNKNOWN')
+                    gpt_confidence = self.last_gpt_analysis.get('confidence', 0)
+                    gpt_outlook = self.last_gpt_analysis.get('market_outlook', 'NEUTRAL')
+                    print(f"   • GPT Latest: {gpt_action} ({gpt_confidence:.2f}) - {gpt_outlook}")
+                    
+            except Exception as e:
+                print(f"   • GPT Status Error: {e}")
     
     def load_state(self):
         """Load application state"""
@@ -410,11 +661,25 @@ class OptimizedTradingBot:
             print(f"❌ State saving error: {e}")
             return False
     
+    def log_performance_stats(self):
+        """Log performance statistics including GPT"""
+        try:
+            if self.gpt_enabled and self.gpt_analyzer:
+                gpt_stats = self.gpt_analyzer.get_performance_stats()
+                print(f"""
+📊 GPT Performance:
+   Total Analyses: {gpt_stats['total_analyses']}
+   Success Rate: {gpt_stats['success_rate']}
+   Model: {gpt_stats['model_used']}
+""")
+        except Exception as e:
+            print(f"Stats logging error: {e}")
+    
     def start(self):
         """Start enhanced trading bot"""
-        print("🚀 Starting OPTIMIZED DexBot with Enhanced ML & Adaptive Trading...")
+        print("🚀 Starting OPTIMIZED DexBot with Enhanced ML, GPT & Adaptive Trading...")
         print(f"⏰ Start: {datetime.now()}")
-        print(f"🎯 Settings: {settings['trades_per_cycle']} trades/{settings['cycle_delay_seconds']}s, ML: {settings.get('ml_enabled', True)}")
+        print(f"🎯 Settings: {settings['trades_per_cycle']} trades/{settings['cycle_delay_seconds']}s, ML: {settings.get('ml_enabled', True)}, GPT: {self.gpt_enabled}")
         
         # Setup directories
         os.makedirs("data", exist_ok=True)
@@ -482,6 +747,21 @@ class OptimizedTradingBot:
                     except Exception as e:
                         print(f"   • ML Display Error: {e}")
                 
+                # GPT status
+                if self.gpt_enabled and self.last_gpt_analysis:
+                    try:
+                        gpt_action = self.last_gpt_analysis.get('action', 'UNKNOWN')
+                        gpt_confidence = self.last_gpt_analysis.get('confidence', 0)
+                        gpt_outlook = self.last_gpt_analysis.get('market_outlook', 'NEUTRAL')
+                        print(f"   • GPT Analysis: {gpt_action} ({gpt_confidence:.2f}) - {gpt_outlook}")
+                        print(f"   • GPT Analyses Count: {self.gpt_analysis_count}")
+                    except Exception as e:
+                        print(f"   • GPT Display Error: {e}")
+                
+                # Log performance stats every 5 cycles
+                if cycle % 5 == 0:
+                    self.log_performance_stats()
+                
                 # Adaptive delay between cycles
                 print(f"⏳ Enhanced break: {self.adaptive_delay}s before next cycle...")
                 time.sleep(self.adaptive_delay)
@@ -506,6 +786,12 @@ class OptimizedTradingBot:
                 print(f"   • Total transactions: {self.state['count']:,}")
                 print(f"   • Recent win rate: {self.recent_win_rate:.1%}")
                 print(f"   • ML predictions generated: {self.ml_prediction_count}")
+                
+                if self.gpt_enabled:
+                    print(f"   • GPT analyses performed: {self.gpt_analysis_count}")
+                    if self.gpt_analyzer:
+                        gpt_stats = self.gpt_analyzer.get_performance_stats()
+                        print(f"   • GPT success rate: {gpt_stats.get('success_rate', 'N/A')}")
                 
                 if self.latest_market_data:
                     final_price = self.latest_market_data.get('price', 0)
