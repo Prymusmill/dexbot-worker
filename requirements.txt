@@ -11,4 +11,5 @@ tensorflow
 keras
 joblib
 psycopg2-binary
-openai>=1.0.0
+openai
+python-dotenv
