@@ -122,7 +122,7 @@ class OptimizedTradingBot:
                 df = data_result['data']
                 print(f"🤖 Generating enhanced ML predictions from {len(df)} transactions...")
                 
-                prediction = self.ml_integration.get_ensemble_prediction(df)
+                prediction = self.ml_integration.get_ensemble_prediction_with_reality_check(df)
                 
                 if 'predicted_price' in prediction:
                     self.ml_predictions = prediction

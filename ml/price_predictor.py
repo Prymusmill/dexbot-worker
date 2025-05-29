@@ -1,4 +1,4 @@
-# ml/price_predictor.py - FIXED COMPLETE VERSION
+# ml/price_predictor.py - COMPLETE FIXED VERSION with Reality Check
 import numpy as np
 import pandas as pd
 import joblib
@@ -564,7 +564,7 @@ class OptimizedPricePredictionModel:
             return False
 
 class MLTradingIntegration:
-    """OPTIMIZED: Enhanced ML integration with multi-model ensemble"""
+    """OPTIMIZED: Enhanced ML integration with multi-model ensemble and Reality Check"""
     
     def __init__(self):
         self.ensemble_model = OptimizedPricePredictionModel('ensemble')
@@ -610,6 +610,91 @@ class MLTradingIntegration:
         
         return self.ensemble_model.predict_ensemble(recent_data)
     
+    def get_ensemble_prediction_with_reality_check(self, recent_data: pd.DataFrame) -> Dict:
+        """ENHANCED: Ensemble prediction WITH REALITY CHECK for better performance"""
+        
+        # Get base prediction
+        base_prediction = self.get_ensemble_prediction(recent_data)
+        
+        if 'error' in base_prediction:
+            return base_prediction
+        
+        try:
+            from config.settings import SETTINGS as settings
+            
+            # REALITY CHECK 1: Model Performance Gating
+            performance = self.get_model_performance()
+            
+            if performance:
+                # Calculate average model accuracy
+                accuracies = [metrics.get('accuracy', 0) for metrics in performance.values()]
+                avg_accuracy = sum(accuracies) / len(accuracies) if accuracies else 0
+                
+                min_accuracy = settings.get('model_accuracy_threshold', 0.4) * 100
+                
+                if avg_accuracy < min_accuracy:
+                    print(f"🛑 Reality Check: Model accuracy too low ({avg_accuracy:.1f}% < {min_accuracy:.1f}%)")
+                    base_prediction['confidence'] = min(base_prediction.get('confidence', 0.5), 0.3)
+                    base_prediction['reality_check'] = f'Low model accuracy: {avg_accuracy:.1f}%'
+            
+            # REALITY CHECK 2: Market Regime Awareness
+            if len(recent_data) > 0:
+                current_rsi = recent_data['rsi'].iloc[-1] if 'rsi' in recent_data.columns else 50
+                current_price = recent_data['price'].iloc[-1] if 'price' in recent_data.columns else recent_data['amount_out'].iloc[-1]
+                
+                rsi_overbought = settings.get('rsi_overbought_threshold', 75)
+                rsi_oversold = settings.get('rsi_oversold_threshold', 25)
+                
+                # Reduce confidence in extreme RSI conditions
+                if current_rsi > rsi_overbought:
+                    confidence_penalty = 0.3
+                    base_prediction['confidence'] *= (1 - confidence_penalty)
+                    base_prediction['reality_check'] = f'Overbought market (RSI: {current_rsi:.1f})'
+                    print(f"⚠️ Reality Check: Overbought market RSI {current_rsi:.1f}, confidence reduced")
+                    
+                elif current_rsi < rsi_oversold:
+                    confidence_penalty = 0.3  
+                    base_prediction['confidence'] *= (1 - confidence_penalty)
+                    base_prediction['reality_check'] = f'Oversold market (RSI: {current_rsi:.1f})'
+                    print(f"⚠️ Reality Check: Oversold market RSI {current_rsi:.1f}, confidence reduced")
+            
+            # REALITY CHECK 3: Confidence Capping
+            max_confidence = settings.get('max_model_confidence', 0.8)
+            if base_prediction.get('confidence', 0) > max_confidence:
+                original_confidence = base_prediction['confidence']
+                base_prediction['confidence'] = max_confidence
+                print(f"🎯 Reality Check: Capped confidence {original_confidence:.2f} → {max_confidence:.2f}")
+            
+            # REALITY CHECK 4: Model Agreement vs Performance
+            model_agreement = base_prediction.get('model_agreement', 0.5)
+            confidence = base_prediction.get('confidence', 0.5)
+            
+            # If models agree strongly but have poor track record, reduce confidence
+            if model_agreement > 0.9 and confidence > 0.8:
+                if performance and avg_accuracy < 50:  # Poor historical performance
+                    confidence_reduction = 0.4
+                    base_prediction['confidence'] *= (1 - confidence_reduction)
+                    base_prediction['reality_check'] = f'High agreement but poor track record (acc: {avg_accuracy:.1f}%)'
+                    print(f"🔍 Reality Check: High agreement but poor performance, confidence reduced")
+            
+            # REALITY CHECK 5: Recent Performance Integration
+            if base_prediction.get('confidence', 0) > 0.9:
+                # Very high confidence should be rare and well-justified
+                base_prediction['confidence'] = 0.85  # Cap at 85%
+                print(f"🛡️ Reality Check: Extreme confidence capped at 85%")
+            
+            # Add reality check metadata
+            base_prediction['reality_checked'] = True
+            base_prediction['original_confidence'] = base_prediction.get('confidence', 0.5)
+            
+            return base_prediction
+            
+        except Exception as e:
+            print(f"⚠️ Reality check error: {e}")
+            # Return original prediction if reality check fails
+            base_prediction['reality_checked'] = False
+            return base_prediction
+    
     def get_model_performance(self) -> Dict:
         """Get detailed performance metrics for all models"""
         if not self.ensemble_model.model_performance:
@@ -633,36 +718,10 @@ class MLTradingIntegration:
         if self.last_training_time is None:
             return True
         
-        # Retrain every 4 hours for optimal performance
+        # Retrain every 2 hours for optimal performance (reduced from 4h)
         time_since_training = datetime.now() - self.last_training_time
-        return time_since_training > timedelta(hours=4)
+        return time_since_training > timedelta(hours=2)
     
     def get_feature_importance(self) -> Dict:
         """Get feature importance from ensemble models"""
         return self.ensemble_model.feature_importance
-
-    def save_ensemble_models(self):
-        """Save all trained models"""
-        try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-            for model_name, model in self.models.items():
-                filepath = f"ml/models/ensemble_{model_name}_{timestamp}"
-                joblib.dump(model, f"{filepath}.pkl")
-        
-            # Save metadata
-            metadata = {
-                'feature_scaler': self.feature_scaler,
-                'model_performance': self.model_performance,
-                'ensemble_weights': self.ensemble_weights,
-                'feature_importance': self.feature_importance,
-                'training_time': datetime.now().isoformat()
-            }
-        
-            joblib.dump(metadata, f"ml/models/ensemble_metadata_{timestamp}.pkl")
-            print(f"✅ Ensemble models saved: {timestamp}")
-            return True
-        
-        except Exception as e:
-            print(f"❌ Error saving ensemble models: {e}")
-            return False
