@@ -18,7 +18,7 @@ warnings.filterwarnings('ignore')
 # Ustawienie podstawowego poziomu logowania
 logging.basicConfig(
     level=logging.INFO,
-     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
 class OptimizedPricePredictionModel:
@@ -157,19 +157,19 @@ class OptimizedPricePredictionModel:
             # FIXED: Safe bollinger band calculations
             bb_range = df['bb_upper'] - df['bb_lower']
             df['bb_position'] = np.where(bb_range > 1e-8,
-                                       (df[price_col] - df['bb_lower']) /
-                                        bb_range,
-                                       0.5)
+                                         (df[price_col] - df['bb_lower']) /
+                                         bb_range,
+                                         0.5)
             df['bb_width'] = np.where(df['bb_middle'] > 1e-8,
-                                    bb_range / df['bb_middle'],
-                                    0.01)
+                                      bb_range / df['bb_middle'],
+                                      0.01)
 
             # === TECHNICAL INDICATORS ===
 
             # FIXED: Enhanced RSI with better error handling
             if 'rsi' in df.columns:
                 df['rsi_clean'] = pd.to_numeric(
-    df['rsi'], errors='coerce').fillna(50.0)
+                    df['rsi'], errors='coerce').fillna(50.0)
             else:
                 df['rsi_clean'] = self._calculate_rsi_fixed(df[price_col])
 
@@ -179,8 +179,8 @@ class OptimizedPricePredictionModel:
             df['rsi_oversold'] = (df['rsi_clean'] < 30).astype(int)
             df['rsi_overbought'] = (df['rsi_clean'] > 70).astype(int)
             df['rsi_neutral'] = (
-    (df['rsi_clean'] >= 40) & (
-        df['rsi_clean'] <= 60)).astype(int)
+                (df['rsi_clean'] >= 40) & (
+                    df['rsi_clean'] <= 60)).astype(int)
 
             # MACD
             df['macd_line'], df['macd_signal'] = self._calculate_macd_fixed(
@@ -195,11 +195,11 @@ class OptimizedPricePredictionModel:
             # === VOLUME FEATURES ===
             if 'volume' in df.columns:
                 df['volume_clean'] = pd.to_numeric(
-    df['volume'], errors='coerce').fillna(
-        df['amount_in'] if 'amount_in' in df.columns else 1.0)
+                    df['volume'], errors='coerce').fillna(
+                    df['amount_in'] if 'amount_in' in df.columns else 1.0)
             elif 'amount_in' in df.columns:
                 df['volume_clean'] = pd.to_numeric(
-    df['amount_in'], errors='coerce').fillna(1.0)
+                    df['amount_in'], errors='coerce').fillna(1.0)
             else:
                 df['volume_clean'] = 1.0  # Default volume
 
@@ -220,9 +220,9 @@ class OptimizedPricePredictionModel:
             # FIXED: Safe price position calculation
             price_range = df['recent_high'] - df['recent_low']
             df['price_position'] = np.where(price_range > 1e-8,
-                                          (df[price_col] -
-                                           df['recent_low']) / price_range,
-                                          0.5)
+                                            (df[price_col] -
+                                             df['recent_low']) / price_range,
+                                            0.5)
 
             # FIXED: Trend strength calculation
             df['trend_strength'] = abs(
@@ -238,8 +238,8 @@ class OptimizedPricePredictionModel:
             df['day_of_week'] = df['timestamp'].dt.dayofweek
             df['is_weekend'] = df['day_of_week'].isin([5, 6]).astype(int)
             df['is_night'] = (
-    (df['hour'] >= 22) | (
-        df['hour'] <= 6)).astype(int)
+                (df['hour'] >= 22) | (
+                    df['hour'] <= 6)).astype(int)
 
             # === MARKET REGIME FEATURES - FIXED ===
 
@@ -249,7 +249,7 @@ class OptimizedPricePredictionModel:
                 vol_q25 = df['volatility_20'].quantile(0.25)
 
                 df['vol_regime'] = np.where(df['volatility_20'] > vol_q75, 2,      # High vol
-                                   np.where(df['volatility_20'] > vol_q25, 1, 0))   # Medium/Low vol
+                                            np.where(df['volatility_20'] > vol_q25, 1, 0))   # Medium/Low vol
             else:
                 # Fallback if volatility_20 doesn't exist
                 df['vol_regime'] = 1  # Default to medium volatility
@@ -259,7 +259,7 @@ class OptimizedPricePredictionModel:
             trend_q30 = df['trend_strength'].quantile(0.3)
 
             df['trend_regime'] = np.where(df['trend_strength'] > trend_q70, 2,      # Strong trend
-                                        np.where(df['trend_strength'] > trend_q30, 1, 0))   # Weak/No trend
+                                          np.where(df['trend_strength'] > trend_q30, 1, 0))   # Weak/No trend
 
             # === TARGET VARIABLE ===
             df['target'] = df[price_col].shift(-1)
@@ -314,17 +314,17 @@ class OptimizedPricePredictionModel:
                 if df[col].isna().any():
                     # Use median for numeric features, mode for categorical
                     if col in [
-    'vol_regime',
-    'trend_regime',
-    'rsi_oversold',
-    'rsi_overbought',
-    'rsi_neutral',
-    'macd_bullish',
-    'volume_spike',
-    'is_weekend',
-     'is_night']:
+                        'vol_regime',
+                        'trend_regime',
+                        'rsi_oversold',
+                        'rsi_overbought',
+                        'rsi_neutral',
+                        'macd_bullish',
+                        'volume_spike',
+                        'is_weekend',
+                            'is_night']:
                         df[col] = df[col].fillna(
-    df[col].mode()[0] if not df[col].mode().empty else 0)
+                            df[col].mode()[0] if not df[col].mode().empty else 0)
                     else:
                         df[col] = df[col].fillna(df[col].median())
 
@@ -335,8 +335,8 @@ class OptimizedPricePredictionModel:
 
             # Fill target variable
             df['target'] = df['target'].fillna(
-    method='ffill').fillna(
-        method='bfill')
+                method='ffill').fillna(
+                method='bfill')
             final_clean = df.dropna(subset=['target'])
 
             if len(final_clean) < 20:
@@ -360,18 +360,18 @@ class OptimizedPricePredictionModel:
             return pd.DataFrame()
 
     def _calculate_rsi_fixed(
-    self,
-    prices: pd.Series,
-     window: int = 14) -> pd.Series:
+            self,
+            prices: pd.Series,
+            window: int = 14) -> pd.Series:
         """FIXED: Enhanced RSI calculation with better error handling"""
         try:
             delta = prices.diff()
             gain = (
-    delta.where(
-        delta > 0,
-        0)).rolling(
-            window=window,
-             min_periods=1).mean()
+                delta.where(
+                    delta > 0,
+                    0)).rolling(
+                window=window,
+                min_periods=1).mean()
             loss = (-delta.where(delta < 0, 0)
                     ).rolling(window=window, min_periods=1).mean()
 
@@ -386,11 +386,11 @@ class OptimizedPricePredictionModel:
             return pd.Series([50.0] * len(prices), index=prices.index)
 
     def _calculate_macd_fixed(self,
-    prices: pd.Series,
-    fast: int = 12,
-    slow: int = 26,
-    signal: int = 9) -> Tuple[pd.Series,
-     pd.Series]:
+                              prices: pd.Series,
+                              fast: int = 12,
+                              slow: int = 26,
+                              signal: int = 9) -> Tuple[pd.Series,
+                                                        pd.Series]:
         """FIXED: Enhanced MACD calculation"""
         try:
             ema_fast = prices.ewm(span=fast).mean()
@@ -404,7 +404,7 @@ class OptimizedPricePredictionModel:
             return zeros, zeros
 
     def _calculate_stochastic_fixed(
-        self, prices: pd.Series, window: int = 14) -> Tuple[pd.Series, pd.Series]:
+            self, prices: pd.Series, window: int = 14) -> Tuple[pd.Series, pd.Series]:
         """FIXED: Stochastic Oscillator calculation"""
         try:
             high_roll = prices.rolling(window).max()
@@ -413,8 +413,8 @@ class OptimizedPricePredictionModel:
             # FIXED: Better division by zero handling
             price_range = high_roll - low_roll
             stoch_k = np.where(price_range > 1e-8,
-                             100 * (prices - low_roll) / price_range,
-                             50.0)
+                               100 * (prices - low_roll) / price_range,
+                               50.0)
             stoch_k = pd.Series(stoch_k, index=prices.index)
             stoch_d = stoch_k.rolling(3).mean()
 
@@ -425,9 +425,9 @@ class OptimizedPricePredictionModel:
             return fifties, fifties
 
     def train_ensemble_models(
-    self,
-    df: pd.DataFrame,
-     test_size: float = 0.2) -> Dict:
+            self,
+            df: pd.DataFrame,
+            test_size: float = 0.2) -> Dict:
         """Train multiple models with hyperparameter optimization"""
         try:
             self.logger.info(
@@ -438,12 +438,12 @@ class OptimizedPricePredictionModel:
 
             if df_features.empty or len(df_features) < 50:
                 return {
-    'success': False,
-     'error': f'Insufficient data: {len(df_features)}'}
+                    'success': False,
+                    'error': f'Insufficient data: {len(df_features)}'}
 
             # Extract features and target
             feature_cols = [
-    col for col in df_features.columns if col != 'target']
+                col for col in df_features.columns if col != 'target']
             X = df_features[feature_cols].values.astype(np.float64)
             y = df_features['target'].values.astype(np.float64)
 
@@ -453,8 +453,8 @@ class OptimizedPricePredictionModel:
 
             if len(X) < 30:
                 return {
-    'success': False,
-     'error': f'Too few clean samples: {len(X)}'}
+                    'success': False,
+                    'error': f'Too few clean samples: {len(X)}'}
 
             # Train-test split
             split_idx = max(10, int(len(X) * (1 - test_size)))
@@ -479,18 +479,18 @@ class OptimizedPricePredictionModel:
                         # Use simplified parameters for speed with n_jobs=-1
                         if model_name == 'random_forest':
                             model = RandomForestRegressor(
-    n_estimators=100, max_depth=10, random_state=42, n_jobs=-1)
+                                n_estimators=100, max_depth=10, random_state=42, n_jobs=-1)
                         elif model_name == 'gradient_boost':
                             model = GradientBoostingRegressor(
-    n_estimators=100, max_depth=6, learning_rate=0.1, random_state=42)
+                                n_estimators=100, max_depth=6, learning_rate=0.1, random_state=42)
                         elif model_name == 'extra_trees':
                             model = ExtraTreesRegressor(
-    n_estimators=100, max_depth=10, random_state=42, n_jobs=-1)
+                                n_estimators=100, max_depth=10, random_state=42, n_jobs=-1)
                         elif model_name == 'ridge':
                             model = Ridge(alpha=1.0)
                         elif model_name == 'elastic_net':
                             model = ElasticNet(
-    alpha=1.0, l1_ratio=0.5, max_iter=2000)
+                                alpha=1.0, l1_ratio=0.5, max_iter=2000)
                     else:
                         # Use GridSearchCV for smaller datasets
                         base_model = config['model'](random_state=42)
@@ -501,11 +501,11 @@ class OptimizedPricePredictionModel:
                             simplified_params[param] = values[:2]
 
                         model = GridSearchCV(
-    base_model,
-    simplified_params,
-    cv=3,
-    scoring='neg_mean_squared_error',
-     n_jobs=-1)
+                            base_model,
+                            simplified_params,
+                            cv=3,
+                            scoring='neg_mean_squared_error',
+                            n_jobs=-1)
 
                     # Train model
                     model.fit(X_train_scaled, y_train)
@@ -531,7 +531,7 @@ class OptimizedPricePredictionModel:
                         actual_direction = np.sign(np.diff(y_test))
                         pred_direction = np.sign(np.diff(test_pred))
                         accuracy = np.mean(
-    actual_direction == pred_direction) * 100
+                            actual_direction == pred_direction) * 100
                     else:
                         accuracy = 50.0
 
@@ -570,8 +570,8 @@ class OptimizedPricePredictionModel:
 
             # Mark as trained if at least one model succeeded
             successful_models = [
-    name for name,
-     result in results.items() if result.get('success')]
+                name for name,
+                result in results.items() if result.get('success')]
             if successful_models:
                 self.is_trained = True
                 self.logger.info(
@@ -581,7 +581,7 @@ class OptimizedPricePredictionModel:
                 return {'success': False, 'error': 'All models failed'}
 
             return {'success': True, 'results': results,
-                'successful_models': successful_models}
+                    'successful_models': successful_models}
 
         except Exception as e:
             self.logger.error(f"❌ Ensemble training error: {e}")
@@ -602,7 +602,7 @@ class OptimizedPricePredictionModel:
             # Combined score (R² weighted more heavily)
             combined_score = 0.7 * r2_score + 0.3 * accuracy
             weights[model_name] = max(
-    0.1, combined_score)  # Minimum weight of 0.1
+                0.1, combined_score)  # Minimum weight of 0.1
             total_score += weights[model_name]
 
         # Normalize weights
@@ -626,7 +626,7 @@ class OptimizedPricePredictionModel:
 
             # Get latest features
             feature_cols = [
-    col for col in df_features.columns if col != 'target']
+                col for col in df_features.columns if col != 'target']
             latest_features = df_features[feature_cols].iloc[-1:].values
 
             # Scale features
@@ -649,10 +649,10 @@ class OptimizedPricePredictionModel:
             # Calculate weighted ensemble prediction
             if self.ensemble_weights:
                 weighted_sum = sum(pred * self.ensemble_weights.get(name, 0)
-                                 for name, pred in predictions.items())
+                                   for name, pred in predictions.items())
                 ensemble_prediction = weighted_sum
                 ensemble_confidence = sum(self.ensemble_weights.get(name, 0)
-                                        for name in predictions.keys())
+                                          for name in predictions.keys())
             else:
                 # Simple average if no weights
                 ensemble_prediction = np.mean(list(predictions.values()))
@@ -676,11 +676,11 @@ class OptimizedPricePredictionModel:
             model_agreement = self._calculate_model_agreement(
                 predictions, current_price)
             final_confidence = min(
-    0.95,
-    ensemble_confidence *
-    0.7 +
-    model_agreement *
-     0.3)
+                0.95,
+                ensemble_confidence *
+                0.7 +
+                model_agreement *
+                0.3)
 
             result = {
                 'predicted_price': ensemble_prediction,
@@ -697,8 +697,9 @@ class OptimizedPricePredictionModel:
                 'features_used': len(feature_cols)
             }
 
-            self.logger.info(f"🎯 Ensemble: {direction.upper()} ${ensemble_prediction:.4f} "
-                           f"(confidence: {final_confidence:.2f}, agreement: {model_agreement:.2f})")
+            self.logger.info(
+                f"🎯 Ensemble: {direction.upper()} ${ensemble_prediction:.4f} "
+                f"(confidence: {final_confidence:.2f}, agreement: {model_agreement:.2f})")
 
             return result
 
@@ -707,16 +708,16 @@ class OptimizedPricePredictionModel:
             return {'error': str(e)}
 
     def _calculate_model_agreement(
-    self,
-    predictions: Dict,
-     current_price: float) -> float:
+            self,
+            predictions: Dict,
+            current_price: float) -> float:
         """Calculate how much models agree on direction"""
         if len(predictions) < 2:
             return 0.5
 
         directions = [
-    1 if pred > current_price else -
-    1 for pred in predictions.values()]
+            1 if pred > current_price else -
+            1 for pred in predictions.values()]
         agreement = abs(sum(directions)) / len(directions)
         return agreement
 
@@ -739,8 +740,8 @@ class OptimizedPricePredictionModel:
             }
 
             joblib.dump(
-    metadata,
-     f"ml/models/ensemble_metadata_{timestamp}.pkl")
+                metadata,
+                f"ml/models/ensemble_metadata_{timestamp}.pkl")
             self.logger.info(f"✅ Ensemble models saved: {timestamp}")
             return True
 
@@ -755,22 +756,26 @@ class MLTradingIntegration:
         self.last_training_time = None
         self.training_in_progress = False
         self.logger = logging.getLogger(__name__)
-        
+
     def get_ensemble_prediction_with_reality_check(self, recent_data):
         if not self.ensemble_model.is_trained:
             training_result = self.train_models(recent_data)
             if not training_result.get('success'):
                 return {'error': 'Training failed'}
         return self.ensemble_model.predict_ensemble(recent_data)
-    
+
     def train_models(self, df):
         return self.ensemble_model.train_ensemble_models(df)
-    
+
     def get_model_performance(self):
         return self.ensemble_model.model_performance or {}
-    
+
     def should_retrain(self):
         return True
+    def get_ensemble_prediction(self, recent_data):
+        """Get ensemble prediction for dashboard"""
+        return self.get_ensemble_prediction_with_reality_check(recent_data)
     
     def get_feature_importance(self):
+        """Get feature importance"""
         return self.ensemble_model.feature_importance or {}
