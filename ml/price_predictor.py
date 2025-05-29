@@ -190,16 +190,10 @@ class OptimizedPricePredictionModel:
             
             # === MARKET REGIME FEATURES ===
             
-            # Volatility regime
-        try:
-            df['vol_regime'] = pd.qcut(df['volatility_20'].fillna(df['volatility_20'].median()), 
-                              q=3, labels=[0, 1, 2], duplicates='drop').astype(int)
-        except Exception as e:
-            print(f"⚠️ Volatility regime error: {e}")
-            # Fallback to simple volatility categorization
+            # Volatility regime - Simple fallback approach
             vol_median = df['volatility_20'].median()
             df['vol_regime'] = np.where(df['volatility_20'] > vol_median * 1.5, 2,
-                                       np.where(df['volatility_20'] > vol_median * 0.5, 1, 0))
+                                   np.where(df['volatility_20'] > vol_median * 0.5, 1, 0))
             
             # Trend regime
             df['trend_regime'] = np.where(df['trend_strength'] > df['trend_strength'].quantile(0.7), 2,
