@@ -757,14 +757,14 @@ class MLTradingIntegration:
         # Try training with ALL data first
         training_result = self.train_models_with_all_data()
         
-            if not training_result.get('success'):
-                # Fallback to recent data only
-                if len(recent_data) >= 100:
-                    self.logger.info("🤖 Fallback: training with recent data only...")
-                    training_result = self.train_models(recent_data)
+        if not training_result.get('success'):
+            # Fallback to recent data only
+            if len(recent_data) >= 100:
+                self.logger.info("🤖 Fallback: training with recent data only...")
+                training_result = self.train_models(recent_data)
             
-                if not training_result.get('success'):
-                    return {'error': f'Auto-training failed: {training_result.get("error")}'}
+            if not training_result.get('success'):
+                return {'error': f'Auto-training failed: {training_result.get("error")}'}
     
         if not self.ensemble_model.is_trained:
             return {'error': f'No trained models available'}
