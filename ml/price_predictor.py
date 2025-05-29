@@ -82,27 +82,29 @@ class OptimizedPricePredictionModel:
         os.makedirs("ml/models", exist_ok=True)
         
     def prepare_advanced_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """ENHANCED: Advanced feature engineering with more indicators"""
+        """FIXED: Advanced feature engineering with proper error handling"""
         try:
             print(f"🔍 Advanced feature preparation with {len(df)} rows")
             
             df = df.copy().sort_values('timestamp')
             
-            # Price column handling
-            if 'price' in df.columns and df['price'].notna().sum() > len(df) * 0.5:
+            # FIXED: Better price column handling
+            if 'price' in df.columns and df['price'].notna().sum() > len(df) * 0.3:
                 price_col = 'price'
-            else:
+            elif 'amount_out' in df.columns:
                 df['price'] = pd.to_numeric(df['amount_out'], errors='coerce')
                 price_col = 'price'
+            else:
+                print("❌ No valid price column found")
+                return pd.DataFrame()
             
+            # Clean price data
             df[price_col] = pd.to_numeric(df[price_col], errors='coerce')
             df = df.dropna(subset=[price_col])
             
             if len(df) < 30:
-                print(f"❌ Insufficient data: {len(df)}")
+                print(f"❌ Insufficient data after cleaning: {len(df)}")
                 return pd.DataFrame()
-            
-            # ENHANCED FEATURE ENGINEERING
             
             # === PRICE FEATURES ===
             df['price_change'] = df[price_col].pct_change().fillna(0)
@@ -111,7 +113,7 @@ class OptimizedPricePredictionModel:
             # Multiple timeframe moving averages
             for period in [3, 5, 10, 15, 20]:
                 df[f'sma_{period}'] = df[price_col].rolling(period, min_periods=1).mean()
-                df[f'price_vs_sma_{period}'] = (df[price_col] - df[f'sma_{period}']) / df[f'sma_{period}']
+                df[f'price_vs_sma_{period}'] = (df[price_col] - df[f'sma_{period}']) / (df[f'sma_{period}'] + 1e-8)
             
             # Exponential moving averages
             df['ema_5'] = df[price_col].ewm(span=5).mean()
@@ -119,52 +121,65 @@ class OptimizedPricePredictionModel:
             df['ema_20'] = df[price_col].ewm(span=20).mean()
             
             # Price momentum features
-            df['momentum_3'] = df[price_col] / df[price_col].shift(3) - 1
-            df['momentum_5'] = df[price_col] / df[price_col].shift(5) - 1
-            df['momentum_10'] = df[price_col] / df[price_col].shift(10) - 1
+            df['momentum_3'] = df[price_col] / (df[price_col].shift(3) + 1e-8) - 1
+            df['momentum_5'] = df[price_col] / (df[price_col].shift(5) + 1e-8) - 1
+            df['momentum_10'] = df[price_col] / (df[price_col].shift(10) + 1e-8) - 1
             
             # === VOLATILITY FEATURES ===
             for period in [5, 10, 15, 20]:
-                df[f'volatility_{period}'] = df[price_col].rolling(period, min_periods=1).std()
-                df[f'volatility_norm_{period}'] = df[f'volatility_{period}'] / df[price_col]
+                vol_col = f'volatility_{period}'
+                df[vol_col] = df[price_col].rolling(period, min_periods=1).std()
+                df[f'volatility_norm_{period}'] = df[vol_col] / (df[price_col] + 1e-8)
             
             # Bollinger Bands
             df['bb_middle'] = df[price_col].rolling(20, min_periods=1).mean()
             df['bb_std'] = df[price_col].rolling(20, min_periods=1).std()
             df['bb_upper'] = df['bb_middle'] + 2 * df['bb_std']
             df['bb_lower'] = df['bb_middle'] - 2 * df['bb_std']
-            df['bb_position'] = (df[price_col] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower'])
-            df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle']
+            
+            # FIXED: Safe bollinger band calculations
+            bb_range = df['bb_upper'] - df['bb_lower']
+            df['bb_position'] = np.where(bb_range > 1e-8, 
+                                       (df[price_col] - df['bb_lower']) / bb_range, 
+                                       0.5)
+            df['bb_width'] = np.where(df['bb_middle'] > 1e-8,
+                                    bb_range / df['bb_middle'],
+                                    0.01)
             
             # === TECHNICAL INDICATORS ===
             
-            # Enhanced RSI
+            # FIXED: Enhanced RSI with better error handling
             if 'rsi' in df.columns:
                 df['rsi_clean'] = pd.to_numeric(df['rsi'], errors='coerce').fillna(50.0)
             else:
-                df['rsi_clean'] = self._calculate_rsi(df[price_col])
+                df['rsi_clean'] = self._calculate_rsi_fixed(df[price_col])
+            
+            # Clip RSI to valid range
+            df['rsi_clean'] = df['rsi_clean'].clip(0, 100)
             
             df['rsi_oversold'] = (df['rsi_clean'] < 30).astype(int)
             df['rsi_overbought'] = (df['rsi_clean'] > 70).astype(int)
             df['rsi_neutral'] = ((df['rsi_clean'] >= 40) & (df['rsi_clean'] <= 60)).astype(int)
             
             # MACD
-            df['macd_line'], df['macd_signal'] = self._calculate_macd(df[price_col])
+            df['macd_line'], df['macd_signal'] = self._calculate_macd_fixed(df[price_col])
             df['macd_histogram'] = df['macd_line'] - df['macd_signal']
             df['macd_bullish'] = (df['macd_histogram'] > 0).astype(int)
             
             # Stochastic Oscillator
-            df['stoch_k'], df['stoch_d'] = self._calculate_stochastic(df[price_col])
+            df['stoch_k'], df['stoch_d'] = self._calculate_stochastic_fixed(df[price_col])
             
             # === VOLUME FEATURES ===
             if 'volume' in df.columns:
-                df['volume_clean'] = pd.to_numeric(df['volume'], errors='coerce')
+                df['volume_clean'] = pd.to_numeric(df['volume'], errors='coerce').fillna(df['amount_in'] if 'amount_in' in df.columns else 1.0)
+            elif 'amount_in' in df.columns:
+                df['volume_clean'] = pd.to_numeric(df['amount_in'], errors='coerce').fillna(1.0)
             else:
-                df['volume_clean'] = pd.to_numeric(df['amount_in'], errors='coerce')
+                df['volume_clean'] = 1.0  # Default volume
             
             df['volume_sma_5'] = df['volume_clean'].rolling(5, min_periods=1).mean()
             df['volume_sma_10'] = df['volume_clean'].rolling(10, min_periods=1).mean()
-            df['volume_ratio'] = df['volume_clean'] / df['volume_sma_10']
+            df['volume_ratio'] = df['volume_clean'] / (df['volume_sma_10'] + 1e-8)
             df['volume_spike'] = (df['volume_ratio'] > 1.5).astype(int)
             
             # === MARKET STRUCTURE FEATURES ===
@@ -172,14 +187,19 @@ class OptimizedPricePredictionModel:
             # Support/Resistance levels
             df['recent_high'] = df[price_col].rolling(10, min_periods=1).max()
             df['recent_low'] = df[price_col].rolling(10, min_periods=1).min()
-            df['price_position'] = (df[price_col] - df['recent_low']) / (df['recent_high'] - df['recent_low'])
             
-            # Trend strength
-            df['trend_strength'] = abs(df['sma_5'] - df['sma_20']) / df['sma_20']
+            # FIXED: Safe price position calculation
+            price_range = df['recent_high'] - df['recent_low']
+            df['price_position'] = np.where(price_range > 1e-8,
+                                          (df[price_col] - df['recent_low']) / price_range,
+                                          0.5)
+            
+            # FIXED: Trend strength calculation
+            df['trend_strength'] = abs(df['sma_5'] - df['sma_20']) / (df['sma_20'] + 1e-8)
             df['trend_direction'] = np.where(df['sma_5'] > df['sma_20'], 1, -1)
             
             # Price acceleration
-            df['price_acceleration'] = df['price_change'].diff()
+            df['price_acceleration'] = df['price_change'].diff().fillna(0)
             
             # === TIME-BASED FEATURES ===
             df['timestamp'] = pd.to_datetime(df['timestamp'])
@@ -188,16 +208,25 @@ class OptimizedPricePredictionModel:
             df['is_weekend'] = df['day_of_week'].isin([5, 6]).astype(int)
             df['is_night'] = ((df['hour'] >= 22) | (df['hour'] <= 6)).astype(int)
             
-            # === MARKET REGIME FEATURES ===
+            # === MARKET REGIME FEATURES - FIXED ===
             
-            # Volatility regime - Simple fallback approach
-            vol_median = df['volatility_20'].median()
-            df['vol_regime'] = np.where(df['volatility_20'] > vol_median * 1.5, 2,
-                                   np.where(df['volatility_20'] > vol_median * 0.5, 1, 0))
+            # FIXED: Volatility regime using quantiles
+            if 'volatility_20' in df.columns:
+                vol_q75 = df['volatility_20'].quantile(0.75)
+                vol_q25 = df['volatility_20'].quantile(0.25)
+                
+                df['vol_regime'] = np.where(df['volatility_20'] > vol_q75, 2,      # High vol
+                                   np.where(df['volatility_20'] > vol_q25, 1, 0))   # Medium/Low vol
+            else:
+                # Fallback if volatility_20 doesn't exist
+                df['vol_regime'] = 1  # Default to medium volatility
             
-            # Trend regime
-            df['trend_regime'] = np.where(df['trend_strength'] > df['trend_strength'].quantile(0.7), 2,
-                                        np.where(df['trend_strength'] > df['trend_strength'].quantile(0.3), 1, 0))
+            # FIXED: Trend regime using actual trend strength
+            trend_q70 = df['trend_strength'].quantile(0.7)
+            trend_q30 = df['trend_strength'].quantile(0.3)
+            
+            df['trend_regime'] = np.where(df['trend_strength'] > trend_q70, 2,      # Strong trend
+                                        np.where(df['trend_strength'] > trend_q30, 1, 0))   # Weak/No trend
             
             # === TARGET VARIABLE ===
             df['target'] = df[price_col].shift(-1)
@@ -229,29 +258,49 @@ class OptimizedPricePredictionModel:
                 'vol_regime', 'trend_regime'
             ]
             
-            # Keep only existing columns
-            available_features = [col for col in feature_columns if col in df.columns and not df[col].isna().all()]
+            # FIXED: Keep only existing columns with valid data
+            available_features = []
+            for col in feature_columns:
+                if col in df.columns and not df[col].isna().all() and not np.isinf(df[col]).all():
+                    available_features.append(col)
             
-            print(f"📋 Available advanced features: {len(available_features)}")
+            print(f"📋 Available features after filtering: {len(available_features)}")
             
-            if len(available_features) < 10:
-                print(f"❌ Too few features: {len(available_features)}")
+            if len(available_features) < 8:
+                print(f"❌ Too few valid features: {len(available_features)}")
                 return pd.DataFrame()
             
             # Clean data
             df = df[:-1]  # Remove last row (no target)
-            feature_data = df[available_features]
             
-            # Fill NaN with medians
+            # FIXED: Better NaN handling
             for col in available_features:
-                df[col] = df[col].fillna(df[col].median())
+                if df[col].isna().any():
+                    # Use median for numeric features, mode for categorical
+                    if col in ['vol_regime', 'trend_regime', 'rsi_oversold', 'rsi_overbought', 'rsi_neutral', 'macd_bullish', 'volume_spike', 'is_weekend', 'is_night']:
+                        df[col] = df[col].fillna(df[col].mode()[0] if not df[col].mode().empty else 0)
+                    else:
+                        df[col] = df[col].fillna(df[col].median())
+                
+                # Handle infinite values
+                if np.isinf(df[col]).any():
+                    df[col] = df[col].replace([np.inf, -np.inf], np.nan)
+                    df[col] = df[col].fillna(df[col].median())
             
-            df['target'] = df['target'].fillna(method='ffill')
+            # Fill target variable
+            df['target'] = df['target'].fillna(method='ffill').fillna(method='bfill')
             final_clean = df.dropna(subset=['target'])
+            
+            if len(final_clean) < 20:
+                print(f"❌ Too few samples after cleaning: {len(final_clean)}")
+                return pd.DataFrame()
             
             result_df = final_clean[available_features + ['target']].copy()
             
             print(f"✅ Advanced features prepared: {result_df.shape}")
+            print(f"   Features: {len(available_features)}")
+            print(f"   Samples: {len(result_df)}")
+            
             return result_df
             
         except Exception as e:
@@ -260,29 +309,55 @@ class OptimizedPricePredictionModel:
             traceback.print_exc()
             return pd.DataFrame()
     
-    def _calculate_rsi(self, prices: pd.Series, window: int = 14) -> pd.Series:
-        """Enhanced RSI calculation"""
-        delta = prices.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=window, min_periods=1).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=window, min_periods=1).mean()
-        rs = gain / (loss + 1e-10)
-        return (100 - (100 / (1 + rs))).fillna(50.0)
+    def _calculate_rsi_fixed(self, prices: pd.Series, window: int = 14) -> pd.Series:
+        """FIXED: Enhanced RSI calculation with better error handling"""
+        try:
+            delta = prices.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=window, min_periods=1).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=window, min_periods=1).mean()
+            
+            # FIXED: Better division by zero handling
+            rs = gain / (loss + 1e-6)  # Increased epsilon
+            rsi = (100 - (100 / (1 + rs))).fillna(50.0)
+            
+            # Ensure RSI is within valid range
+            return rsi.clip(0, 100)
+        except Exception as e:
+            print(f"⚠️ RSI calculation error: {e}")
+            return pd.Series([50.0] * len(prices), index=prices.index)
     
-    def _calculate_macd(self, prices: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> Tuple[pd.Series, pd.Series]:
-        """Enhanced MACD calculation"""
-        ema_fast = prices.ewm(span=fast).mean()
-        ema_slow = prices.ewm(span=slow).mean() 
-        macd_line = ema_fast - ema_slow
-        macd_signal = macd_line.ewm(span=signal).mean()
-        return macd_line.fillna(0), macd_signal.fillna(0)
+    def _calculate_macd_fixed(self, prices: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> Tuple[pd.Series, pd.Series]:
+        """FIXED: Enhanced MACD calculation"""
+        try:
+            ema_fast = prices.ewm(span=fast).mean()
+            ema_slow = prices.ewm(span=slow).mean() 
+            macd_line = ema_fast - ema_slow
+            macd_signal = macd_line.ewm(span=signal).mean()
+            return macd_line.fillna(0), macd_signal.fillna(0)
+        except Exception as e:
+            print(f"⚠️ MACD calculation error: {e}")
+            zeros = pd.Series([0.0] * len(prices), index=prices.index)
+            return zeros, zeros
     
-    def _calculate_stochastic(self, prices: pd.Series, window: int = 14) -> Tuple[pd.Series, pd.Series]:
-        """Stochastic Oscillator calculation"""
-        high_roll = prices.rolling(window).max()
-        low_roll = prices.rolling(window).min()
-        stoch_k = 100 * (prices - low_roll) / (high_roll - low_roll + 1e-10)
-        stoch_d = stoch_k.rolling(3).mean()
-        return stoch_k.fillna(50), stoch_d.fillna(50)
+    def _calculate_stochastic_fixed(self, prices: pd.Series, window: int = 14) -> Tuple[pd.Series, pd.Series]:
+        """FIXED: Stochastic Oscillator calculation"""
+        try:
+            high_roll = prices.rolling(window).max()
+            low_roll = prices.rolling(window).min()
+            
+            # FIXED: Better division by zero handling
+            price_range = high_roll - low_roll
+            stoch_k = np.where(price_range > 1e-8,
+                             100 * (prices - low_roll) / price_range,
+                             50.0)
+            stoch_k = pd.Series(stoch_k, index=prices.index)
+            stoch_d = stoch_k.rolling(3).mean()
+            
+            return stoch_k.fillna(50), stoch_d.fillna(50)
+        except Exception as e:
+            print(f"⚠️ Stochastic calculation error: {e}")
+            fifties = pd.Series([50.0] * len(prices), index=prices.index)
+            return fifties, fifties
     
     def train_ensemble_models(self, df: pd.DataFrame, test_size: float = 0.2) -> Dict:
         """Train multiple models with hyperparameter optimization"""
