@@ -18,6 +18,7 @@ class MLTradingIntegration:
         self.scaler = StandardScaler()
         self.logger = logging.getLogger(__name__)
         self.min_samples = 500  # ZMIENIONE: 1000 → 500 (jak bot!)
+        self.prediction_count = 0  # Track predictions
         
         # DODANE: Model agreement tracking
         self.model_agreements = {}
