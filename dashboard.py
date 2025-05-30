@@ -342,10 +342,14 @@ def display_trading_performance(df, metrics):
 
     with col4:
         last_trade_time = df['timestamp'].max()
-        time_since = datetime.now() - last_trade_time.to_pydatetime()
+        try:
+            time_since = datetime.now() - last_trade_time.to_pydatetime().replace(tzinfo=None)
+            minutes_ago = time_since.seconds // 60
+        except Exception:
+            minutes_ago = 0
         st.metric(
             "Ostatnia transakcja",
-            f"{time_since.seconds // 60}min temu",
+            f"{minutes_ago}min temu",
             delta=None
         )
 
