@@ -25,7 +25,7 @@ def load_trading_data():
         try:
             from database.db_manager import get_db_manager
             db_manager = get_db_manager()
-            df = db_manager.get_recent_transactions(limit=500)  # NOWE - 500 najnowszych
+            df = db_manager.get_recent_transactions(limit=1000)  # NOWE - 500 najnowszych
 
             if len(df) > 100:
                 st.success(f"✅ Loaded {len(df)} transactions from PostgreSQL!")
