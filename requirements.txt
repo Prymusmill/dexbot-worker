@@ -12,4 +12,4 @@ keras
 joblib
 psycopg2-binary
 openai
-python-dotenvstreamlit
+python-dotenv
