@@ -444,6 +444,13 @@ class OptimizedTradingBot:
         # Use combined decision
         action = trading_decision.get('action', 'HOLD')
         confidence = trading_decision.get('confidence', 0.5)
+
+        if self.ml_predictions:
+            ml_direction = self.ml_predictions.get('direction', 'neutral')
+            ml_confidence = self.ml_predictions.get('confidence', 0)
+            if ml_direction == 'unprofitable' and ml_confidence > 0.8:
+                print(f"🚫 ML Skip: {ml_direction} with {ml_confidence:.1%} confidence")
+                return False
         
         # Market volatility check
         vol_threshold = settings.get("market_volatility_threshold", 0.05)
