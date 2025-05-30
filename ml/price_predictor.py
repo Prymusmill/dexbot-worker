@@ -446,6 +446,48 @@ class MLTradingIntegration:
             }
         
         return prediction
+
+    # Dodaj tę metodę do klasy MLTradingIntegration w price_predictor.py
+    # Na końcu klasy, przed ostatnią metodą
+
+    def should_retrain(self):
+        """Check if models should be retrained"""
+        # Simple logic: retrain if no models exist or after many predictions
+        if not self.models:
+            return True
+    
+        # Retrain every 100 predictions
+        if self.prediction_count > 0 and self.prediction_count % 100 == 0:
+            return True
+    
+        # Retrain if model performance seems poor
+        if hasattr(self, 'model_scores'):
+            avg_score = sum(self.model_scores.values()) / len(self.model_scores)
+            if avg_score < 55:  # If average accuracy below 55%
+                 return True
+    
+        return False
+
+    def train_models(self, df):
+        """Train models wrapper for compatibility"""
+        try:
+            X, y = self.prepare_features_classification(df)
+            if X is None:
+                return {"success": False, "error": "Data preparation failed"}
+        
+            success = self.train_classification_models(X, y)
+        
+            if success:
+                return {
+                    "success": True,
+                    "successful_models": list(self.models.keys()),
+                    "model_count": len(self.models)
+                }
+            else:
+                return {"success": False, "error": "Training failed"}
+    
+        except Exception as e:
+            return {"success": False, "error": str(e)}
     
     def get_model_performance(self):
         """ENHANCED model performance with agreement metrics"""
