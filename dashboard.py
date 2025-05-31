@@ -25,10 +25,16 @@ def load_trading_data():
         try:
             from database.db_manager import get_db_manager
             db_manager = get_db_manager()
-            df = db_manager.get_recent_transactions(limit=1000)  # NOWE - 500 najnowszych
+
+            # FIXED: Pobierz WSZYSTKIE transakcje zamiast tylko 1000
+            df = db_manager.get_all_transactions_for_ml()  # ← Zmiana tutaj!
 
             if len(df) > 100:
                 st.success(f"✅ Loaded {len(df)} transactions from PostgreSQL!")
+
+                # Debug info
+                st.info(f"🔍 Kolumny w danych: {list(df.columns)}")
+
                 # Process data...
                 df['timestamp'] = pd.to_datetime(df['timestamp'])
                 df['profitable'] = df['amount_out'] > df['amount_in']
@@ -41,32 +47,46 @@ def load_trading_data():
                 df['fees_estimated'] = df['amount_in'] * 0.001
                 df['date'] = df['timestamp'].dt.date
                 df['hour'] = df['timestamp'].dt.hour
+
+                # Dodaj volume jako amount_in jeśli brakuje
+                if 'volume' not in df.columns:
+                    df['volume'] = df['amount_in']
+                    st.info("📊 Dodano kolumnę 'volume' jako amount_in")
+
                 return df
+
         except Exception as e:
-            st.warning(f"⚠️ PostgreSQL failed: {e}, fallback to CSV")
+            st.error(f"⚠️ PostgreSQL failed: {e}")
+            st.code(str(e))  # Debug error
 
         # Fallback to CSV
-         # Fallback to CSV
         if not os.path.exists("data/memory.csv"):
             st.error("❌ No data source available!")
             return pd.DataFrame()
-        
-        df = pd.read_csv("data/memory.csv")
-        # Add original CSV processing here
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        df['profitable'] = df['amount_out'] > df['amount_in']
-        df['pnl'] = df['amount_out'] - df['amount_in']
-        df['net_pnl'] = df['pnl'] - (df['amount_in'] * 0.001)
-        df = df.sort_values('timestamp')
-        df['cumulative_pnl'] = df['net_pnl'].cumsum()
-        df['pnl_percentage'] = (df['amount_out'] - df['amount_in']) / df['amount_in'] * 100
-        df['fees_estimated'] = df['amount_in'] * 0.001
-        df['date'] = df['timestamp'].dt.date
-        df['hour'] = df['timestamp'].dt.hour
-        return df
+
+            df = pd.read_csv("data/memory.csv")
+            # Przetwarzanie CSV...
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            df['profitable'] = df['amount_out'] > df['amount_in']
+            df['pnl'] = df['amount_out'] - df['amount_in']
+            df['net_pnl'] = df['pnl'] - (df['amount_in'] * 0.001)
+            df = df.sort_values('timestamp')
+            df['cumulative_pnl'] = df['net_pnl'].cumsum()
+            df['pnl_percentage'] = (
+                df['amount_out'] - df['amount_in']) / df['amount_in'] * 100
+            df['fees_estimated'] = df['amount_in'] * 0.001
+            df['date'] = df['timestamp'].dt.date
+            df['hour'] = df['timestamp'].dt.hour
+
+            if 'volume' not in df.columns:
+                df['volume'] = df['amount_in']
+
+            return df
+
     except Exception as e:
         st.error(f"❌ Błąd wczytywania danych: {e}")
         return pd.DataFrame()
+
 
 def calculate_metrics(df):
     """Oblicz kluczowe metryki"""
@@ -143,7 +163,8 @@ def display_ml_predictions(df):
 
                 try:
                     if hasattr(ml_integration, 'get_ensemble_prediction_with_reality_check'):
-                        prediction = ml_integration.get_ensemble_prediction_with_reality_check(df)
+                        prediction = ml_integration.get_ensemble_prediction_with_reality_check(
+                            df)
                     else:
                         prediction = ml_integration.get_ensemble_prediction(df)
                     st.write(f"🔍 Otrzymana predykcja: {prediction}")
