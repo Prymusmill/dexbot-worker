@@ -444,6 +444,10 @@ class MLTradingIntegration:
                 'issues': [],
                 'passed': True
             }
+            
+        # Add dashboard compatibility
+        prediction['predicted_price'] = prediction['current_price']
+        prediction['price_change_pct'] = 0  # For classification
         
         return prediction
 
