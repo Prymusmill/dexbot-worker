@@ -9,6 +9,7 @@ import threading
 import random  # FIXED: Added missing import
 from datetime import datetime
 from typing import Dict
+from ml.auto_retrainer import setup_auto_retraining
 
 # Wyłącz git checks
 os.environ['GIT_PYTHON_REFRESH'] = 'quiet'
@@ -903,6 +904,133 @@ class OptimizedTradingBot:
 
             except Exception as e:
                 print(f"🏁 Session complete (status error: {e})")
+
+    # run_worker.py - ADD TO OptimizedTradingBot class
+    def __init__(self):
+        # ... existing initialization ...
+    
+        # Auto-retraining integration
+        self.auto_retrainer = None
+        if ML_AVAILABLE:
+            try:
+                from ml.auto_retrainer import setup_auto_retraining
+                self.auto_retrainer = setup_auto_retraining(
+                    ml_integration=self.ml_integration,
+                    db_manager=self.trade_executor.db_manager if hasattr(self.trade_executor, 'db_manager') else None,
+                    retrain_interval_hours=6,  # Retrain every 6 hours
+                    min_new_samples=100,       # Need 100 new samples
+                    performance_threshold=0.55  # Retrain if accuracy < 55%
+                )
+                print("🔄 Auto-retraining service initialized")
+            except Exception as e:
+                print(f"⚠️ Auto-retraining setup failed: {e}")
+                self.auto_retrainer = None
+
+    def execute_enhanced_trade_cycle(self):
+        """Enhanced trading cycle with auto-retraining feedback"""
+        # ... existing code ...
+    
+        executed_in_cycle = 0
+        profitable_in_cycle = 0
+    
+        for i in range(cycle_size):
+            try:
+                print(f"🔹 Transaction {self.state['count'] + 1} (#{i+1}/{cycle_size})")
+            
+                # Get ML prediction for feedback
+                ml_prediction = None
+                if self.ml_predictions:
+                    ml_prediction = self.ml_predictions.get('predicted_profitable')
+            
+                # Enhanced trading decision
+                if self.should_execute_trade_enhanced():
+                    # Execute trade with current market data
+                    trade_result = self.trade_executor.execute_trade(settings, self.latest_market_data)
+                
+                    if trade_result and hasattr(trade_result, 'profitable'):
+                        executed_in_cycle += 1
+                        if trade_result.profitable:
+                            profitable_in_cycle += 1
+                    
+                        # FEEDBACK TO AUTO-RETRAINER
+                        if self.auto_retrainer and ml_prediction is not None:
+                            self.auto_retrainer.add_prediction_feedback(
+                                predicted_profitable=ml_prediction,
+                                actual_profitable=trade_result.profitable
+                            )
+                            print(f"🔄 Feedback: ML={ml_prediction}, Actual={trade_result.profitable}")
+                    
+                        self.state["count"] += 1
+                else:
+                    print("⏸️ Trade skipped - unfavorable conditions")
+
+                # Status check every 10 trades
+                if (i + 1) % 10 == 0:
+                    self.check_enhanced_status()
+
+                # Adaptive delay between trades
+                time.sleep(0.2)
+
+            except Exception as e:
+                print(f"❌ Trade execution error: {e}")
+                continue
+
+        # Calculate cycle performance
+        cycle_win_rate = (profitable_in_cycle / executed_in_cycle) if executed_in_cycle > 0 else 0.5
+        self.cycle_performance.append(cycle_win_rate)
+
+        # Keep only last 10 cycles
+        if len(self.cycle_performance) > 10:
+            self.cycle_performance = self.cycle_performance[-10:]
+
+        self.recent_win_rate = sum(self.cycle_performance) / len(self.cycle_performance)
+
+        print(f"✅ Enhanced cycle complete: {executed_in_cycle}/{cycle_size} executed, "
+              f"{profitable_in_cycle} profitable ({cycle_win_rate:.1%} cycle win rate)")
+
+    def check_enhanced_status(self):
+        if self.auto_retrainer:
+            try:
+                retrain_status = self.auto_retrainer.get_retraining_status()
+                print(f"🔄 Auto-Retraining Status:")
+                print(f"   • Service: {'Running' if retrain_status['is_running'] else 'Stopped'}")
+                print(f"   • Total retrains: {retrain_status['total_retrains']}")
+                print(f"   • Success rate: {retrain_status['successful_retrains']}/{retrain_status['total_retrains']}")
+            
+                if retrain_status.get('recent_accuracy'):
+                    print(f"   • Recent accuracy: {retrain_status['recent_accuracy']:.1%}")
+            
+                if retrain_status.get('next_retrain_in_hours'):
+                    hours = retrain_status['next_retrain_in_hours']
+                    print(f"   • Next retrain: {hours:.1f}h")
+            
+            except Exception as e:
+                print(f"   • Auto-retrain status error: {e}")
+
+    # ADD TO main() function cleanup
+    def start(self):
+        # ... existing start code ...
+    
+        try:
+            # ... main trading loop ...
+            pass
+        except KeyboardInterrupt:
+            print("\n🛑 Optimized bot stopped by user")
+        except Exception as e:
+            print(f"\n💥 Unexpected error: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            # Cleanup including auto-retrainer
+            if self.market_service:
+                self.market_service.stop_stream()
+        
+            if self.auto_retrainer:
+                print("🔄 Stopping auto-retrainer...")
+                self.auto_retrainer.stop_auto_retraining()
+        
+            if self.save_state():
+                print(f"💾 Final state saved: {self.state['count']} transactions")
 
 
 if __name__ == "__main__":
