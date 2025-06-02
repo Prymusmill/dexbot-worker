@@ -48,9 +48,11 @@ MEMORY_FILE = "data/memory.csv"
 
 
 class OptimizedTradingBot:
+    # ZASTĄP KONSTRUKTOR __init__ w OptimizedTradingBot klasy (run_worker.py)
     def __init__(self):
+        # Core trading attributes
         self.trade_executor = get_trade_executor()
-        self.market_service = None
+        self.market_service = None  # ✅ DODANE!
         self.latest_market_data = None
         self.trading_signals = TradingSignals()
         self.state = {"count": 0}
@@ -76,7 +78,8 @@ class OptimizedTradingBot:
         self.cycle_performance = []
         self.recent_win_rate = 0.5
 
-        # Enhanced ML Integration
+        # Enhanced ML Integration - ✅ NAPRAWIONE!
+        self.ml_integration = None  # Initialize as None first
         if ML_AVAILABLE:
             try:
                 self.ml_integration = MLTradingIntegration()
@@ -84,22 +87,44 @@ class OptimizedTradingBot:
             except Exception as e:
                 print(f"⚠️ Enhanced ML integration failed: {e}")
                 self.ml_integration = None
-        else:
-            self.ml_integration = None
 
         # Initialize GPT analyzer
+        self.gpt_analyzer = None  # Initialize as None first
+        self.gpt_enabled = False
         if GPT_AVAILABLE:
             try:
                 self.gpt_analyzer = setup_gpt_enhanced_trading()
                 print("🤖 GPT-enhanced ML system initialized")
-                self.gpt_enabled = False
+                self.gpt_enabled = True  # ✅ Set to True only if successful
             except Exception as e:
                 print(f"⚠️ GPT initialization failed: {e}")
                 self.gpt_analyzer = None
                 self.gpt_enabled = False
+
+        # Auto-retraining integration - ✅ NAPRAWIONE!
+        self.auto_retrainer = None
+        if ML_AVAILABLE and self.ml_integration is not None:  # ✅ Check if ml_integration exists!
+            try:
+                from ml.auto_retrainer import setup_auto_retraining
+                self.auto_retrainer = setup_auto_retraining(
+                    ml_integration=self.ml_integration,
+                    db_manager=self.trade_executor.db_manager if hasattr(self.trade_executor, 'db_manager') else None,
+                    retrain_interval_hours=6,  # Retrain every 6 hours
+                    min_new_samples=100,       # Need 100 new samples
+                    performance_threshold=0.55  # Retrain if accuracy < 55%
+                )
+                print("🔄 Auto-retraining service initialized")
+            except Exception as e:
+                print(f"⚠️ Auto-retraining setup failed: {e}")
+                self.auto_retrainer = None
         else:
-            self.gpt_analyzer = None
-            self.gpt_enabled = False
+            print("⚠️ Auto-retraining skipped: ML integration not available")
+
+        print(f"✅ OptimizedTradingBot initialized:")
+        print(f"   • ML Integration: {'✅' if self.ml_integration else '❌'}")
+        print(f"   • GPT Analyzer: {'✅' if self.gpt_enabled else '❌'}")
+        print(f"   • Auto-retrainer: {'✅' if self.auto_retrainer else '❌'}")
+        print(f"   • Market Service: {'✅' if self.market_service is not None else '❌ (will be set later)'}")
 
     def on_market_data_update(self, market_data: Dict):
         """Enhanced callback with volatility tracking"""
@@ -904,134 +929,6 @@ class OptimizedTradingBot:
 
             except Exception as e:
                 print(f"🏁 Session complete (status error: {e})")
-
-    # run_worker.py - ADD TO OptimizedTradingBot class
-    def __init__(self):
-        # ... existing initialization ...
-    
-        # Auto-retraining integration
-        self.auto_retrainer = None
-        if ML_AVAILABLE:
-            try:
-                from ml.auto_retrainer import setup_auto_retraining
-                self.auto_retrainer = setup_auto_retraining(
-                    ml_integration=self.ml_integration,
-                    db_manager=self.trade_executor.db_manager if hasattr(self.trade_executor, 'db_manager') else None,
-                    retrain_interval_hours=6,  # Retrain every 6 hours
-                    min_new_samples=100,       # Need 100 new samples
-                    performance_threshold=0.55  # Retrain if accuracy < 55%
-                )
-                print("🔄 Auto-retraining service initialized")
-            except Exception as e:
-                print(f"⚠️ Auto-retraining setup failed: {e}")
-                self.auto_retrainer = None
-
-    def execute_enhanced_trade_cycle(self):
-        """Enhanced trading cycle with auto-retraining feedback"""
-        # ... existing code ...
-    
-        executed_in_cycle = 0
-        profitable_in_cycle = 0
-    
-        for i in range(cycle_size):
-            try:
-                print(f"🔹 Transaction {self.state['count'] + 1} (#{i+1}/{cycle_size})")
-            
-                # Get ML prediction for feedback
-                ml_prediction = None
-                if self.ml_predictions:
-                    ml_prediction = self.ml_predictions.get('predicted_profitable')
-            
-                # Enhanced trading decision
-                if self.should_execute_trade_enhanced():
-                    # Execute trade with current market data
-                    trade_result = self.trade_executor.execute_trade(settings, self.latest_market_data)
-                
-                    if trade_result and hasattr(trade_result, 'profitable'):
-                        executed_in_cycle += 1
-                        if trade_result.profitable:
-                            profitable_in_cycle += 1
-                    
-                        # FEEDBACK TO AUTO-RETRAINER
-                        if self.auto_retrainer and ml_prediction is not None:
-                            self.auto_retrainer.add_prediction_feedback(
-                                predicted_profitable=ml_prediction,
-                                actual_profitable=trade_result.profitable
-                            )
-                            print(f"🔄 Feedback: ML={ml_prediction}, Actual={trade_result.profitable}")
-                    
-                        self.state["count"] += 1
-                else:
-                    print("⏸️ Trade skipped - unfavorable conditions")
-
-                # Status check every 10 trades
-                if (i + 1) % 10 == 0:
-                    self.check_enhanced_status()
-
-                # Adaptive delay between trades
-                time.sleep(0.2)
-
-            except Exception as e:
-                print(f"❌ Trade execution error: {e}")
-                continue
-
-        # Calculate cycle performance
-        cycle_win_rate = (profitable_in_cycle / executed_in_cycle) if executed_in_cycle > 0 else 0.5
-        self.cycle_performance.append(cycle_win_rate)
-
-        # Keep only last 10 cycles
-        if len(self.cycle_performance) > 10:
-            self.cycle_performance = self.cycle_performance[-10:]
-
-        self.recent_win_rate = sum(self.cycle_performance) / len(self.cycle_performance)
-
-        print(f"✅ Enhanced cycle complete: {executed_in_cycle}/{cycle_size} executed, "
-              f"{profitable_in_cycle} profitable ({cycle_win_rate:.1%} cycle win rate)")
-
-    def check_enhanced_status(self):
-        if self.auto_retrainer:
-            try:
-                retrain_status = self.auto_retrainer.get_retraining_status()
-                print(f"🔄 Auto-Retraining Status:")
-                print(f"   • Service: {'Running' if retrain_status['is_running'] else 'Stopped'}")
-                print(f"   • Total retrains: {retrain_status['total_retrains']}")
-                print(f"   • Success rate: {retrain_status['successful_retrains']}/{retrain_status['total_retrains']}")
-            
-                if retrain_status.get('recent_accuracy'):
-                    print(f"   • Recent accuracy: {retrain_status['recent_accuracy']:.1%}")
-            
-                if retrain_status.get('next_retrain_in_hours'):
-                    hours = retrain_status['next_retrain_in_hours']
-                    print(f"   • Next retrain: {hours:.1f}h")
-            
-            except Exception as e:
-                print(f"   • Auto-retrain status error: {e}")
-
-    # ADD TO main() function cleanup
-    def start(self):
-        # ... existing start code ...
-    
-        try:
-            # ... main trading loop ...
-            pass
-        except KeyboardInterrupt:
-            print("\n🛑 Optimized bot stopped by user")
-        except Exception as e:
-            print(f"\n💥 Unexpected error: {e}")
-            import traceback
-            traceback.print_exc()
-        finally:
-            # Cleanup including auto-retrainer
-            if self.market_service:
-                self.market_service.stop_stream()
-        
-            if self.auto_retrainer:
-                print("🔄 Stopping auto-retrainer...")
-                self.auto_retrainer.stop_auto_retraining()
-        
-            if self.save_state():
-                print(f"💾 Final state saved: {self.state['count']} transactions")
-
 
 if __name__ == "__main__":
     bot = OptimizedTradingBot()
