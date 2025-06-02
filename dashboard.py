@@ -128,104 +128,231 @@ def calculate_metrics(df):
         'sharpe_ratio': sharpe_ratio
     }
 
-
-# dashboard.py - ML section optimization (line ~150-200)
+# dashboard.py - REMOVE signal timeout (line ~180-200)
 
 def display_ml_predictions(df):
-    """Display ML predictions section - OPTIMIZED FOR LARGE DATASETS"""
+    """Display ML predictions section - COMPLETE FIX"""
     st.header("🤖 Machine Learning Predictions")
 
     # FIXED: Limit data for dashboard ML
     if len(df) > 2000:
         df_ml = df.tail(2000)  # Use only last 2000 for dashboard ML
-        st.info(
-            f"📊 Using last 2000 of {len(df)} transactions for ML dashboard prediction")
+        st.info(f"📊 Using last 2000 of {len(df)} transactions for ML dashboard prediction")
     else:
         df_ml = df
-        st.info(
-            f"📊 Using all {len(df_ml)} transactions. ML wymaga minimum 100.")
+        st.info(f"📊 Using all {len(df_ml)} transactions. ML wymaga minimum 100.")
 
     try:
         # Try to load ML integration
         from ml.price_predictor import MLTradingIntegration
         ml_integration = MLTradingIntegration()
-
+        
         # OPTIMIZED: Set smaller min_samples for dashboard
-        ml_integration.min_samples = min(
-            500, len(df_ml) // 2)  # Dynamic min_samples
-
+        ml_integration.min_samples = min(500, len(df_ml) // 2)
+        
         st.success("✅ ML Integration loaded successfully")
 
         # Check if we have enough data
         if len(df_ml) >= 100:
             with st.spinner("Generating ML prediction..."):
-                st.write(
-                    f"🔍 Generating prediction for {len(df_ml)} transactions (optimized)...")
+                st.write(f"🔍 Generating prediction for {len(df_ml)} transactions (optimized)...")
 
                 # Check required columns
                 required_cols = ['price', 'volume', 'rsi']
-                missing_cols = [
-                    col for col in required_cols if col not in df_ml.columns]
+                missing_cols = [col for col in required_cols if col not in df_ml.columns]
 
                 if missing_cols:
                     st.error(f"❌ Brakuje kolumn ML: {missing_cols}")
                     st.write(f"📋 Dostępne kolumny: {list(df_ml.columns)}")
                     return
                 else:
-                    st.success(
-                        f"✅ Wszystkie kolumny ML obecne: {required_cols}")
+                    st.success(f"✅ Wszystkie kolumny ML obecne: {required_cols}")
 
                 try:
-                    # TIMEOUT protection
-                    import signal
-
-                    def timeout_handler(signum, frame):
-                        raise TimeoutError("ML prediction timeout")
-
-                    # Set 30 second timeout
-                    signal.signal(signal.SIGALRM, timeout_handler)
-                    signal.alarm(30)
-
-                    try:
-                        # Use optimized prediction method
-                        if hasattr(ml_integration,
-                                   'get_ensemble_prediction_with_reality_check'):
-                            prediction = ml_integration.get_ensemble_prediction_with_reality_check(
-                                df_ml)
-                        else:
-                            prediction = ml_integration.get_ensemble_prediction(
-                                df_ml)
-
-                        signal.alarm(0)  # Cancel timeout
-
-                    except TimeoutError:
-                        st.error(
-                            "⏰ ML prediction timeout (30s) - dataset too large")
-                        return
-
+                    # FIXED: Simple prediction without timeout
+                    if hasattr(ml_integration, 'get_ensemble_prediction_with_reality_check'):
+                        prediction = ml_integration.get_ensemble_prediction_with_reality_check(df_ml)
+                    else:
+                        prediction = ml_integration.get_ensemble_prediction(df_ml)
+                    
                     st.write(f"🔍 Prediction generated successfully!")
-
+                    
                 except Exception as e:
-                    signal.alarm(0)  # Cancel timeout
                     st.error(f"❌ Błąd generowania predykcji: {e}")
                     import traceback
                     st.code(traceback.format_exc())
                     return
 
-        else:
-            st.info(
-                f"📊 Potrzeba więcej danych do predykcji ML (obecne: {len(df)}/100 transakcji)")
+            # FIXED: Check for profitability prediction instead of price prediction
+            if prediction and 'predicted_profitable' in prediction:
+                st.success("🎉 ML Profitability Prediction wygenerowana pomyślnie!")
 
+                # FIXED: Main prediction metrics for PROFITABILITY
+                col1, col2, col3, col4 = st.columns(4)
+
+                with col1:
+                    # Show profitability prediction
+                    profitable = prediction['predicted_profitable']
+                    prob_profitable = prediction.get('probability_profitable', 0.5)
+                    
+                    profitability_color = "🟢" if profitable else "🔴"
+                    st.metric(
+                        "🎯 Przewidywana Profitable",
+                        f"{profitability_color} {'TAK' if profitable else 'NIE'}",
+                        delta=f"{prob_profitable:.1%} prawdopodobieństwo"
+                    )
+
+                with col2:
+                    # Show recommendation based on profitability
+                    recommendation = prediction.get('recommendation', 'HOLD')
+                    direction = prediction.get('direction', 'neutral')
+                    
+                    rec_color = {"BUY": "🟢", "SELL": "🔴", "HOLD": "🟡"}.get(recommendation, "⚪")
+                    st.metric(
+                        "📈 Rekomendacja",
+                        f"{rec_color} {recommendation}",
+                        delta=f"Based on {direction}"
+                    )
+
+                with col3:
+                    # Confidence
+                    confidence_pct = prediction['confidence'] * 100
+                    st.metric(
+                        "🎯 Pewność modelu",
+                        f"{confidence_pct:.1f}%",
+                        delta=None
+                    )
+
+                with col4:
+                    # Model info
+                    model_count = prediction.get('model_count', 1)
+                    agreement = prediction.get('model_agreement', 0)
+                    st.metric(
+                        "🤖 Model Info",
+                        f"{model_count} modeli",
+                        delta=f"{agreement:.1%} zgodność"
+                    )
+
+                # FIXED: Individual model predictions for PROFITABILITY
+                if 'individual_predictions' in prediction:
+                    st.subheader("🔍 Predykcje poszczególnych modeli")
+
+                    pred_data = []
+                    for model_name, pred_info in prediction['individual_predictions'].items():
+                        profitable = pred_info.get('profitable', False)
+                        probability = pred_info.get('probability', 0.5)
+                        
+                        pred_data.append({
+                            'Model': model_name.replace('_', ' ').title(),
+                            'Przewiduje Profit': '✅ TAK' if profitable else '❌ NIE',
+                            'Prawdopodobieństwo': f"{probability:.1%}",
+                            'Rekomendacja': '🟢 BUY' if profitable and probability > 0.6 else '🔴 HOLD'
+                        })
+
+                    st.dataframe(pd.DataFrame(pred_data), use_container_width=True)
+
+                # Enhanced metrics display
+                if 'enhanced_metrics' in prediction:
+                    st.subheader("📊 Szczegółowe Metryki ML")
+                    
+                    enhanced = prediction['enhanced_metrics']
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Base Confidence", f"{enhanced.get('base_confidence', 0):.2f}")
+                    with col2:
+                        st.metric("Agreement Penalty", f"{enhanced.get('agreement_penalty', 0):.2f}")
+                    with col3:
+                        st.metric("Model Bonus", f"{enhanced.get('model_bonus', 0):.2f}")
+
+                # Reality check info
+                if 'reality_check' in prediction:
+                    reality = prediction['reality_check']
+                    if reality.get('applied') and reality.get('issues'):
+                        st.warning("⚠️ Reality Check Issues:")
+                        for issue in reality['issues']:
+                            st.write(f"• {issue}")
+
+                # ML Model Performance
+                st.subheader("📊 Performance Modeli ML")
+                try:
+                    performance = ml_integration.get_model_performance()
+                    if performance:
+                        perf_data = []
+                        for model_name, metrics in performance.items():
+                            perf_data.append({
+                                'Model': model_name.replace('_', ' ').title(),
+                                'Accuracy': f"{metrics.get('accuracy', 0):.1f}%",
+                                'Type': metrics.get('model_type', 'classification'),
+                                'Training Samples': f"{metrics.get('training_samples', 0):,}",
+                                'Last Trained': metrics.get('last_trained', 'Never')
+                            })
+
+                        if perf_data:
+                            st.dataframe(pd.DataFrame(perf_data), use_container_width=True)
+                        else:
+                            st.info("📊 Modele nie zostały jeszcze wytrenowane")
+                    else:
+                        st.info("📊 Brak danych o performance modeli")
+                except Exception as e:
+                    st.warning(f"⚠️ Nie można pobrać performance modeli: {e}")
+
+                # FIXED: Profitability visualization instead of price prediction
+                st.subheader("📈 Wizualizacja Predykcji Profitability")
+
+                try:
+                    # Create profitability confidence chart
+                    fig_profit = go.Figure()
+
+                    # Show confidence levels
+                    confidence = prediction['confidence']
+                    
+                    # Confidence gauge
+                    fig_profit.add_trace(go.Indicator(
+                        mode = "gauge+number+delta",
+                        value = confidence * 100,
+                        domain = {'x': [0, 1], 'y': [0, 1]},
+                        title = {'text': "ML Confidence"},
+                        delta = {'reference': 50},
+                        gauge = {
+                            'axis': {'range': [None, 100]},
+                            'bar': {'color': "green" if prediction['predicted_profitable'] else "red"},
+                            'steps': [
+                                {'range': [0, 50], 'color': "lightgray"},
+                                {'range': [50, 80], 'color': "yellow"},
+                                {'range': [80, 100], 'color': "green"}
+                            ],
+                            'threshold': {
+                                'line': {'color': "red", 'width': 4},
+                                'thickness': 0.75,
+                                'value': 70
+                            }
+                        }
+                    ))
+
+                    fig_profit.update_layout(height=400, title="Pewność Predykcji Profitability")
+                    st.plotly_chart(fig_profit, use_container_width=True)
+
+                except Exception as e:
+                    st.warning(f"⚠️ Nie można utworzyć wykresu profitability: {e}")
+
+            elif prediction and 'error' in prediction:
+                st.error(f"❌ ML Error: {prediction['error']}")
+            else:
+                st.error("❌ Nie udało się wygenerować predykcji ML")
+                st.write(f"🔍 Otrzymana odpowiedź: {prediction}")
+                
+        else:
+            st.info(f"📊 Potrzeba więcej danych do predykcji ML (obecne: {len(df_ml)}/100 transakcji)")
+            
             # Show progress bar
-            progress = min(len(df) / 100, 1.0)
+            progress = min(len(df_ml) / 100, 1.0)
             st.progress(progress)
-            st.caption(
-                f"Postęp do pierwszej predykcji ML: {len(df)}/100 transakcji")
+            st.caption(f"Postęp do pierwszej predykcji ML: {len(df_ml)}/100 transakcji")
 
     except ImportError as e:
         st.error(f"❌ Moduły ML nie są dostępne: {e}")
-        st.info(
-            "💡 Aby włączyć predykcje ML, upewnij się że system ma zainstalowane: scikit-learn, tensorflow")
+        st.info("💡 Aby włączyć predykcje ML, upewnij się że system ma zainstalowane: scikit-learn, tensorflow")
     except Exception as e:
         st.error(f"❌ Błąd ML: {e}")
         import traceback
