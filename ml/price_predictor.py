@@ -239,7 +239,7 @@ class MLTradingIntegration:
                 accuracy = accuracy_score(y_test, y_pred) * 100
                 try:
                     auc = roc_auc_score(y_test, y_pred_proba) * 100
-                except:
+                except BaseException:
                     auc = 50.0
 
                 # Cross validation
@@ -303,7 +303,8 @@ class MLTradingIntegration:
         # Prepare features
         X, y = self.prepare_features_classification(df)
         if X is None:
-            return {"error": f"Insufficient data: {len(df)}/{self.min_samples} required"}
+            return {
+                "error": f"Insufficient data: {len(df)}/{self.min_samples} required"}
 
         # Train if needed
         if not self.models:
@@ -455,7 +456,7 @@ class MLTradingIntegration:
             if latest_rsi < 5 or latest_rsi > 95:  # Extreme RSI
                 reality_checks.append("Extreme RSI values detected")
                 confidence *= 0.9
-        except:
+        except BaseException:
             pass
 
         # Apply reality check
@@ -472,10 +473,10 @@ class MLTradingIntegration:
             if prediction['confidence'] < 0.6:
                 prediction['recommendation'] = 'HOLD'
         else:
-           prediction['reality_check'] = {
-               'applied': True,
-               'issues': [],
-               'passed': True
+            prediction['reality_check'] = {
+                'applied': True,
+                'issues': [],
+                'passed': True
             }
 
         # DASHBOARD COMPATIBILITY - ADD MISSING FIELDS
@@ -490,7 +491,8 @@ class MLTradingIntegration:
         # Enhanced direction mapping for dashboard
         if prediction['predicted_profitable']:
             prediction['direction'] = 'profitable'  # Our actual prediction
-            prediction['dashboard_direction'] = 'up'  # For dashboard compatibility
+            # For dashboard compatibility
+            prediction['dashboard_direction'] = 'up'
         else:
             prediction['direction'] = 'unprofitable'
             prediction['dashboard_direction'] = 'down'

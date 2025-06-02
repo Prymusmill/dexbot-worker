@@ -7,23 +7,26 @@ from typing import Dict, List, Optional
 import os
 import logging
 
+
 class ClaudeMLAnalyzer:
     """Claude Pro powered ML analysis for trading decisions"""
-    
+
     def __init__(self, api_key: str = None):
         self.api_key = api_key or os.getenv('ANTHROPIC_API_KEY')
         if not self.api_key:
             raise ValueError("ANTHROPIC_API_KEY environment variable required")
-        
+
         self.client = anthropic.Anthropic(api_key=self.api_key)
         self.logger = logging.getLogger(__name__)
-        
-    def analyze_ml_performance(self, performance_data: Dict, recent_trades: pd.DataFrame = None) -> Dict:
+
+    def analyze_ml_performance(
+            self, performance_data: Dict, recent_trades: pd.DataFrame = None) -> Dict:
         """Deep analysis of ML model performance using Claude"""
         try:
             # Prepare comprehensive data for Claude
-            analysis_data = self._prepare_performance_data(performance_data, recent_trades)
-            
+            analysis_data = self._prepare_performance_data(
+                performance_data, recent_trades)
+
             prompt = f"""
             I need you to analyze the performance of my crypto trading ML ensemble system. You're an expert quantitative analyst with deep knowledge of machine learning and crypto markets.
 
@@ -62,20 +65,20 @@ class ClaudeMLAnalyzer:
 
             Format your response as structured analysis with clear sections. Be specific and actionable.
             """
-            
+
             response = self.client.messages.create(
                 model="claude-3-sonnet-20240229",
                 max_tokens=2000,
                 temperature=0.1,  # Low temperature for analytical consistency
                 messages=[{"role": "user", "content": prompt}]
             )
-            
+
             analysis = response.content[0].text
-            
+
             # Extract key metrics and recommendations
             recommendations = self._extract_recommendations(analysis)
             performance_score = self._extract_performance_score(analysis)
-            
+
             return {
                 'success': True,
                 'analysis': analysis,
@@ -84,12 +87,13 @@ class ClaudeMLAnalyzer:
                 'timestamp': datetime.now().isoformat(),
                 'analyzer': 'claude-3-sonnet'
             }
-            
+
         except Exception as e:
             self.logger.error(f"Claude ML analysis failed: {e}")
             return {'success': False, 'error': str(e)}
-    
-    def analyze_trading_opportunity(self, market_data: Dict, ml_prediction: Dict, recent_performance: Dict = None) -> Dict:
+
+    def analyze_trading_opportunity(
+            self, market_data: Dict, ml_prediction: Dict, recent_performance: Dict = None) -> Dict:
         """Analyze specific trading opportunity with Claude"""
         try:
             prompt = f"""
@@ -135,20 +139,20 @@ class ClaudeMLAnalyzer:
 
             Be conservative and focus on risk management. Format as structured recommendation.
             """
-            
+
             response = self.client.messages.create(
                 model="claude-3-sonnet-20240229",
                 max_tokens=1200,
                 temperature=0.15,
                 messages=[{"role": "user", "content": prompt}]
             )
-            
+
             analysis = response.content[0].text
-            
+
             # Extract key decision points
             recommendation = self._extract_trading_recommendation(analysis)
             risk_level = self._extract_risk_level(analysis)
-            
+
             return {
                 'success': True,
                 'analysis': analysis,
@@ -158,17 +162,19 @@ class ClaudeMLAnalyzer:
                 'market_price': market_data.get('price', 0),
                 'ml_confidence': ml_prediction.get('confidence', 0)
             }
-            
+
         except Exception as e:
             self.logger.error(f"Claude trading analysis failed: {e}")
             return {'success': False, 'error': str(e)}
-    
-    def analyze_anomalies(self, recent_data: pd.DataFrame, ml_predictions: List[Dict]) -> Dict:
+
+    def analyze_anomalies(self, recent_data: pd.DataFrame,
+                          ml_predictions: List[Dict]) -> Dict:
         """Detect anomalies in trading data and ML predictions"""
         try:
             # Prepare anomaly data
-            anomaly_data = self._prepare_anomaly_data(recent_data, ml_predictions)
-            
+            anomaly_data = self._prepare_anomaly_data(
+                recent_data, ml_predictions)
+
             prompt = f"""
             I need you to analyze potential anomalies in my crypto trading system. You're an expert in anomaly detection and trading system monitoring.
 
@@ -192,26 +198,27 @@ class ClaudeMLAnalyzer:
 
             Be thorough and conservative in your assessment.
             """
-            
+
             response = self.client.messages.create(
                 model="claude-3-sonnet-20240229",
                 max_tokens=1500,
                 temperature=0.1,
                 messages=[{"role": "user", "content": prompt}]
             )
-            
+
             return {
                 'success': True,
                 'anomaly_analysis': response.content[0].text,
                 'timestamp': datetime.now().isoformat(),
                 'data_points_analyzed': len(recent_data) if recent_data is not None else 0
             }
-            
+
         except Exception as e:
             self.logger.error(f"Claude anomaly analysis failed: {e}")
             return {'success': False, 'error': str(e)}
-    
-    def _prepare_performance_data(self, performance_data: Dict, recent_trades: pd.DataFrame = None) -> Dict:
+
+    def _prepare_performance_data(
+            self, performance_data: Dict, recent_trades: pd.DataFrame = None) -> Dict:
         """Prepare comprehensive performance data for analysis"""
         data = {
             'models': performance_data,
@@ -224,19 +231,22 @@ class ClaudeMLAnalyzer:
             'price_change_24h': 0.5,
             'performance_trend': 'stable'
         }
-        
+
         if recent_trades is not None and len(recent_trades) > 0:
             # Calculate recent performance metrics
-            data['recent_win_rate'] = (recent_trades['profitable'].sum() / len(recent_trades)) * 100
-            data['recent_avg_pnl'] = recent_trades['pnl'].mean() if 'pnl' in recent_trades.columns else 0
-        
+            data['recent_win_rate'] = (
+                recent_trades['profitable'].sum() / len(recent_trades)) * 100
+            data['recent_avg_pnl'] = recent_trades['pnl'].mean(
+            ) if 'pnl' in recent_trades.columns else 0
+
         return data
-    
-    def _prepare_anomaly_data(self, recent_data: pd.DataFrame, ml_predictions: List[Dict]) -> Dict:
+
+    def _prepare_anomaly_data(
+            self, recent_data: pd.DataFrame, ml_predictions: List[Dict]) -> Dict:
         """Prepare data for anomaly detection analysis"""
         if recent_data is None or len(recent_data) == 0:
             return {'error': 'No recent data available'}
-        
+
         # Basic statistics
         data = {
             'price_stats': {
@@ -252,34 +262,36 @@ class ClaudeMLAnalyzer:
             'ml_predictions_count': len(ml_predictions),
             'recent_trades': len(recent_data)
         }
-        
+
         return data
-    
+
     def _extract_recommendations(self, analysis: str) -> List[str]:
         """Extract actionable recommendations from Claude's analysis"""
         recommendations = []
         lines = analysis.split('\n')
-        
+
         in_recommendations = False
         for line in lines:
             line = line.strip()
-            if 'recommendation' in line.lower() or 'improve' in line.lower() or 'suggest' in line.lower():
+            if 'recommendation' in line.lower(
+            ) or 'improve' in line.lower() or 'suggest' in line.lower():
                 in_recommendations = True
             elif in_recommendations and line and not line.startswith('#'):
-                if any(word in line.lower() for word in ['should', 'could', 'recommend', 'consider', 'try']):
+                if any(word in line.lower() for word in [
+                       'should', 'could', 'recommend', 'consider', 'try']):
                     recommendations.append(line)
                     if len(recommendations) >= 5:
                         break
-        
+
         return recommendations
-    
+
     def _extract_performance_score(self, analysis: str) -> Optional[int]:
         """Extract performance score from Claude's analysis"""
         import re
         score_pattern = r'(?:score|rating|assessment).*?(\d+)(?:/10|out of 10)'
         match = re.search(score_pattern, analysis.lower())
         return int(match.group(1)) if match else None
-    
+
     def _extract_trading_recommendation(self, analysis: str) -> str:
         """Extract trading recommendation from Claude's analysis"""
         analysis_lower = analysis.lower()
@@ -289,7 +301,7 @@ class ClaudeMLAnalyzer:
             return 'SELL'
         else:
             return 'HOLD'
-    
+
     def _extract_risk_level(self, analysis: str) -> str:
         """Extract risk level from Claude's analysis"""
         analysis_lower = analysis.lower()
@@ -303,74 +315,85 @@ class ClaudeMLAnalyzer:
             return 'MEDIUM'  # Default
 
 # Integration with existing ML system
+
+
 class ClaudeEnhancedMLIntegration:
     """Enhanced ML integration with Claude analysis"""
-    
+
     def __init__(self, anthropic_api_key: str = None):
         from ml.price_predictor import MLTradingIntegration
         self.ml_integration = MLTradingIntegration()
-        
+
         if anthropic_api_key:
             self.claude_analyzer = ClaudeMLAnalyzer(anthropic_api_key)
         else:
             self.claude_analyzer = None
-        
+
         self.logger = logging.getLogger(__name__)
-    
-    def get_claude_enhanced_prediction(self, recent_data: pd.DataFrame, market_data: Dict) -> Dict:
+
+    def get_claude_enhanced_prediction(
+            self, recent_data: pd.DataFrame, market_data: Dict) -> Dict:
         """Get ML prediction enhanced with Claude analysis"""
         # Get base ML prediction
-        ml_prediction = self.ml_integration.get_ensemble_prediction_with_reality_check(recent_data)
-        
+        ml_prediction = self.ml_integration.get_ensemble_prediction_with_reality_check(
+            recent_data)
+
         if 'error' in ml_prediction or not self.claude_analyzer:
             return ml_prediction
-        
+
         try:
             # Get Claude's analysis of this trading opportunity
             claude_analysis = self.claude_analyzer.analyze_trading_opportunity(
-                market_data, ml_prediction, {'win_rate': 47.5, 'ml_accuracy': 50}
+                market_data, ml_prediction, {
+                    'win_rate': 47.5, 'ml_accuracy': 50}
             )
-            
+
             if claude_analysis.get('success'):
                 ml_prediction['claude_analysis'] = claude_analysis
-                
+
                 # Adjust confidence based on Claude's risk assessment
                 if claude_analysis.get('risk_level') == 'HIGH':
-                    ml_prediction['confidence'] *= 0.7  # Reduce confidence for high risk
+                    # Reduce confidence for high risk
+                    ml_prediction['confidence'] *= 0.7
                 elif claude_analysis.get('risk_level') == 'LOW':
-                    ml_prediction['confidence'] *= 1.1  # Slightly increase for low risk
-                
+                    # Slightly increase for low risk
+                    ml_prediction['confidence'] *= 1.1
+
                 self.logger.info(f"🤖 Claude: {claude_analysis.get('recommendation', 'N/A')} "
-                               f"(Risk: {claude_analysis.get('risk_level', 'N/A')})")
-            
+                                 f"(Risk: {claude_analysis.get('risk_level', 'N/A')})")
+
         except Exception as e:
             self.logger.error(f"Claude analysis error: {e}")
             ml_prediction['claude_analysis'] = {'error': str(e)}
-        
+
         return ml_prediction
-    
+
     def get_performance_insights(self) -> Dict:
         """Get Claude-powered performance insights"""
         if not self.claude_analyzer:
             return {'error': 'Claude analyzer not available'}
-        
+
         try:
             performance_data = self.ml_integration.get_model_performance()
-            return self.claude_analyzer.analyze_ml_performance(performance_data)
+            return self.claude_analyzer.analyze_ml_performance(
+                performance_data)
         except Exception as e:
             return {'error': f'Performance analysis failed: {e}'}
 
 # Usage example
+
+
 def setup_claude_enhanced_trading():
     """Setup Claude-enhanced trading system"""
     # Set your Anthropic API key in environment or pass directly
-    ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')  # Set this in your environment
-    
+    # Set this in your environment
+    ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
+
     if not ANTHROPIC_API_KEY:
         print("⚠️ ANTHROPIC_API_KEY not set - Claude analysis disabled")
         return None
-    
+
     enhanced_ml = ClaudeEnhancedMLIntegration(ANTHROPIC_API_KEY)
     print("✅ Claude-enhanced ML system initialized")
-    
+
     return enhanced_ml

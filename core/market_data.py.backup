@@ -164,12 +164,14 @@ class BinanceMarketData:
                     # Use our fixed RSI instead of external one
                     # self.rsi = TechnicalIndicators.rsi(prices, 14)
 
-                    print(f"📊 Professional Indicators - SMA20: {self.sma_20:.4f}, SMA50: {self.sma_50:.4f}, RSI: {self.rsi:.1f}")
+                    print(
+                        f"📊 Professional Indicators - SMA20: {self.sma_20:.4f}, SMA50: {self.sma_50:.4f}, RSI: {self.rsi:.1f}")
                     return
                 except ImportError:
                     pass
 
-            print(f"📊 Basic Indicators - SMA20: {self.sma_20:.4f}, RSI: {self.rsi:.1f}, Vol: {self.volatility:.4f}")
+            print(
+                f"📊 Basic Indicators - SMA20: {self.sma_20:.4f}, RSI: {self.rsi:.1f}, Vol: {self.volatility:.4f}")
 
         except Exception as e:
             print(f"⚠️ Błąd obliczania wskaźników: {e}")

@@ -163,12 +163,11 @@ class OptimizedTradingBot:
 
                 # FIXED: Add detailed logging
                 try:
-                    prediction = self.ml_integration.get_ensemble_prediction_with_reality_check(
-                        df)
-                    print(
-                        f"🔍 ML Prediction Generated: {type(prediction)} with keys: {list(prediction.keys()) if isinstance(prediction, dict) else 'NOT DICT'}")
+                    prediction = self.ml_integration.get_ensemble_prediction_with_reality_check(df)
+                    print(f"🔍 ML Prediction Generated: {type(prediction)} with keys: {list(prediction.keys()) if isinstance(prediction, dict) else 'NOT DICT'}")
 
-                    if isinstance(prediction, dict) and 'predicted_profitable' in prediction:
+                    if isinstance(
+                            prediction, dict) and 'predicted_profitable' in prediction:
                         self.ml_predictions = prediction
                         self.ml_prediction_count += 1
                         self.current_confidence = prediction.get(
@@ -279,7 +278,8 @@ class OptimizedTradingBot:
         try:
             # Implement based on your exchange API
             # This is placeholder - adapt to your setup
-            if hasattr(self.trade_executor, 'exchange') and self.trade_executor.exchange:
+            if hasattr(self.trade_executor,
+                       'exchange') and self.trade_executor.exchange:
                 balance = self.trade_executor.exchange.fetch_balance()
                 position = balance.get(symbol.replace('/USDT', ''), {})
                 return {
@@ -349,7 +349,8 @@ class OptimizedTradingBot:
             print(f"❌ Trading decision error: {e}")
             return None
 
-    def _combine_ml_gpt_decisions(self, ml_predictions, gpt_analysis, market_data):
+    def _combine_ml_gpt_decisions(
+            self, ml_predictions, gpt_analysis, market_data):
         """Combine ML models and GPT analysis into final decision"""
         try:
             # Default decision
@@ -547,7 +548,8 @@ class OptimizedTradingBot:
         enhanced_confidence = base_confidence
         ml_factor = 1.0
 
-        if self.ml_integration and self.ml_predictions and settings.get("ml_enabled", True):
+        if self.ml_integration and self.ml_predictions and settings.get(
+                "ml_enabled", True):
             try:
                 ml_confidence = self.ml_predictions.get('confidence', 0.5)
                 ml_direction = self.ml_predictions.get('direction', 'neutral')
@@ -621,7 +623,7 @@ class OptimizedTradingBot:
         for i in range(cycle_size):
             try:
                 print(
-                    f"🔹 Transaction {self.state['count'] + 1} (#{i+1}/{cycle_size})")
+                    f"🔹 Transaction {self.state['count'] + 1} (#{i + 1}/{cycle_size})")
 
                 # Enhanced trading decision
                 if self.should_execute_trade_enhanced():

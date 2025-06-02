@@ -16,7 +16,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# FIXED: Usunięto @st.cache_data żeby zawsze ładować najnowsze dane
+# dashboard.py - QUICK FIX for large datasets (line ~30-60)
 
 
 def load_trading_data():
@@ -26,11 +26,11 @@ def load_trading_data():
             from database.db_manager import get_db_manager
             db_manager = get_db_manager()
 
-            # FIXED: Pobierz WSZYSTKIE transakcje zamiast tylko 1000
-            df = db_manager.get_all_transactions_for_ml()  # ← Zmiana tutaj!
+            # FIXED: Pobierz tylko ostatnie 1000 transakcji dla dashboard!
+            df = db_manager.get_recent_transactions(limit=1000)  # ← ZMIANA!
 
             if len(df) > 100:
-                st.success(f"✅ Loaded {len(df)} transactions from PostgreSQL!")
+                st.success(f"✅ Loaded {len(df)} recent transactions from PostgreSQL!")
 
                 # Debug info
                 st.info(f"🔍 Kolumny w danych: {list(df.columns)}")
@@ -64,24 +64,25 @@ def load_trading_data():
             st.error("❌ No data source available!")
             return pd.DataFrame()
 
-            df = pd.read_csv("data/memory.csv")
-            # Przetwarzanie CSV...
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
-            df['profitable'] = df['amount_out'] > df['amount_in']
-            df['pnl'] = df['amount_out'] - df['amount_in']
-            df['net_pnl'] = df['pnl'] - (df['amount_in'] * 0.001)
-            df = df.sort_values('timestamp')
-            df['cumulative_pnl'] = df['net_pnl'].cumsum()
-            df['pnl_percentage'] = (
-                df['amount_out'] - df['amount_in']) / df['amount_in'] * 100
-            df['fees_estimated'] = df['amount_in'] * 0.001
-            df['date'] = df['timestamp'].dt.date
-            df['hour'] = df['timestamp'].dt.hour
+        df = pd.read_csv("data/memory.csv")
+        # Przetwarzanie CSV - tylko ostatnie 1000
+        df = df.tail(1000)  # ← DODANE!
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        df['profitable'] = df['amount_out'] > df['amount_in']
+        df['pnl'] = df['amount_out'] - df['amount_in']
+        df['net_pnl'] = df['pnl'] - (df['amount_in'] * 0.001)
+        df = df.sort_values('timestamp')
+        df['cumulative_pnl'] = df['net_pnl'].cumsum()
+        df['pnl_percentage'] = (
+            df['amount_out'] - df['amount_in']) / df['amount_in'] * 100
+        df['fees_estimated'] = df['amount_in'] * 0.001
+        df['date'] = df['timestamp'].dt.date
+        df['hour'] = df['timestamp'].dt.hour
 
-            if 'volume' not in df.columns:
-                df['volume'] = df['amount_in']
+        if 'volume' not in df.columns:
+            df['volume'] = df['amount_in']
 
-            return df
+        return df
 
     except Exception as e:
         st.error(f"❌ Błąd wczytywania danych: {e}")
@@ -128,271 +129,88 @@ def calculate_metrics(df):
     }
 
 
+# dashboard.py - ML section optimization (line ~150-200)
+
 def display_ml_predictions(df):
-    """Display ML predictions section - FIXED FOR PROFITABILITY PREDICTION"""
+    """Display ML predictions section - OPTIMIZED FOR LARGE DATASETS"""
     st.header("🤖 Machine Learning Predictions")
 
-    # Info o aktualnym stanie danych
-    st.info(f"📊 Załadowano {len(df)} transakcji. ML wymaga minimum 100.")
+    # FIXED: Limit data for dashboard ML
+    if len(df) > 2000:
+        df_ml = df.tail(2000)  # Use only last 2000 for dashboard ML
+        st.info(
+            f"📊 Using last 2000 of {len(df)} transactions for ML dashboard prediction")
+    else:
+        df_ml = df
+        st.info(
+            f"📊 Using all {len(df_ml)} transactions. ML wymaga minimum 100.")
 
     try:
         # Try to load ML integration
         from ml.price_predictor import MLTradingIntegration
         ml_integration = MLTradingIntegration()
+
+        # OPTIMIZED: Set smaller min_samples for dashboard
+        ml_integration.min_samples = min(
+            500, len(df_ml) // 2)  # Dynamic min_samples
+
         st.success("✅ ML Integration loaded successfully")
 
         # Check if we have enough data
-        if len(df) >= 100:
+        if len(df_ml) >= 100:
             with st.spinner("Generating ML prediction..."):
                 st.write(
-                    f"🔍 Próbuję wygenerować predykcję dla {len(df)} transakcji...")
+                    f"🔍 Generating prediction for {len(df_ml)} transactions (optimized)...")
 
                 # Check required columns
                 required_cols = ['price', 'volume', 'rsi']
                 missing_cols = [
-                    col for col in required_cols if col not in df.columns]
+                    col for col in required_cols if col not in df_ml.columns]
 
                 if missing_cols:
                     st.error(f"❌ Brakuje kolumn ML: {missing_cols}")
-                    st.write(f"📋 Dostępne kolumny: {list(df.columns)}")
+                    st.write(f"📋 Dostępne kolumny: {list(df_ml.columns)}")
                     return
                 else:
                     st.success(
                         f"✅ Wszystkie kolumny ML obecne: {required_cols}")
 
                 try:
-                    # FIXED: Use proper profitability prediction method
-                    if hasattr(ml_integration, 'get_ensemble_prediction_with_reality_check'):
-                        prediction = ml_integration.get_ensemble_prediction_with_reality_check(
-                            df)
-                    else:
-                        prediction = ml_integration.get_ensemble_prediction(df)
-                    st.write(f"🔍 Otrzymana predykcja: {prediction}")
+                    # TIMEOUT protection
+                    import signal
+
+                    def timeout_handler(signum, frame):
+                        raise TimeoutError("ML prediction timeout")
+
+                    # Set 30 second timeout
+                    signal.signal(signal.SIGALRM, timeout_handler)
+                    signal.alarm(30)
+
+                    try:
+                        # Use optimized prediction method
+                        if hasattr(ml_integration,
+                                   'get_ensemble_prediction_with_reality_check'):
+                            prediction = ml_integration.get_ensemble_prediction_with_reality_check(
+                                df_ml)
+                        else:
+                            prediction = ml_integration.get_ensemble_prediction(
+                                df_ml)
+
+                        signal.alarm(0)  # Cancel timeout
+
+                    except TimeoutError:
+                        st.error(
+                            "⏰ ML prediction timeout (30s) - dataset too large")
+                        return
+
+                    st.write(f"🔍 Prediction generated successfully!")
+
                 except Exception as e:
+                    signal.alarm(0)  # Cancel timeout
                     st.error(f"❌ Błąd generowania predykcji: {e}")
                     import traceback
                     st.code(traceback.format_exc())
                     return
-
-            # FIXED: Check for profitability prediction instead of price prediction
-            if prediction and 'predicted_profitable' in prediction:
-                st.success(
-                    "🎉 ML Profitability Prediction wygenerowana pomyślnie!")
-
-                # FIXED: Main prediction metrics for PROFITABILITY
-                col1, col2, col3, col4 = st.columns(4)
-
-                with col1:
-                    # Show profitability prediction
-                    profitable = prediction['predicted_profitable']
-                    prob_profitable = prediction.get(
-                        'probability_profitable', 0.5)
-
-                    profitability_color = "🟢" if profitable else "🔴"
-                    st.metric(
-                        "🎯 Przewidywana Profitable",
-                        f"{profitability_color} {'TAK' if profitable else 'NIE'}",
-                        delta=f"{prob_profitable:.1%} prawdopodobieństwo"
-                    )
-
-                with col2:
-                    # Show recommendation based on profitability
-                    recommendation = prediction.get('recommendation', 'HOLD')
-                    direction = prediction.get('direction', 'neutral')
-
-                    rec_color = {"BUY": "🟢", "SELL": "🔴",
-                                 "HOLD": "🟡"}.get(recommendation, "⚪")
-                    st.metric(
-                        "📈 Rekomendacja",
-                        f"{rec_color} {recommendation}",
-                        delta=f"Based on {direction}"
-                    )
-
-                with col3:
-                    # Confidence
-                    confidence_pct = prediction['confidence'] * 100
-                    st.metric(
-                        "🎯 Pewność modelu",
-                        f"{confidence_pct:.1f}%",
-                        delta=None
-                    )
-
-                with col4:
-                    # Model info
-                    model_count = prediction.get('model_count', 1)
-                    agreement = prediction.get('model_agreement', 0)
-                    st.metric(
-                        "🤖 Model Info",
-                        f"{model_count} modeli",
-                        delta=f"{agreement:.1%} zgodność"
-                    )
-
-                # FIXED: Individual model predictions for PROFITABILITY
-                if 'individual_predictions' in prediction:
-                    st.subheader("🔍 Predykcje poszczególnych modeli")
-
-                    pred_data = []
-                    for model_name, pred_info in prediction['individual_predictions'].items():
-                        profitable = pred_info.get('profitable', False)
-                        probability = pred_info.get('probability', 0.5)
-
-                        pred_data.append({
-                            'Model': model_name.replace('_', ' ').title(),
-                            'Przewiduje Profit': '✅ TAK' if profitable else '❌ NIE',
-                            'Prawdopodobieństwo': f"{probability:.1%}",
-                            'Rekomendacja': '🟢 BUY' if profitable and probability > 0.6 else '🔴 HOLD'
-                        })
-
-                    st.dataframe(pd.DataFrame(pred_data),
-                                 use_container_width=True)
-
-                # Enhanced metrics display
-                if 'enhanced_metrics' in prediction:
-                    st.subheader("📊 Szczegółowe Metryki ML")
-
-                    enhanced = prediction['enhanced_metrics']
-
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Base Confidence",
-                                  f"{enhanced.get('base_confidence', 0):.2f}")
-                    with col2:
-                        st.metric("Agreement Penalty",
-                                  f"{enhanced.get('agreement_penalty', 0):.2f}")
-                    with col3:
-                        st.metric("Model Bonus",
-                                  f"{enhanced.get('model_bonus', 0):.2f}")
-
-                # Reality check info
-                if 'reality_check' in prediction:
-                    reality = prediction['reality_check']
-                    if reality.get('applied') and reality.get('issues'):
-                        st.warning("⚠️ Reality Check Issues:")
-                        for issue in reality['issues']:
-                            st.write(f"• {issue}")
-
-                # ML Model Performance (unchanged)
-                st.subheader("📊 Performance Modeli ML")
-                try:
-                    performance = ml_integration.get_model_performance()
-                    if performance:
-                        perf_data = []
-                        for model_name, metrics in performance.items():
-                            perf_data.append({
-                                'Model': model_name.replace('_', ' ').title(),
-                                'Accuracy': f"{metrics.get('accuracy', 0):.1f}%",
-                                'Type': metrics.get('model_type', 'classification'),
-                                'Training Samples': f"{metrics.get('training_samples', 0):,}",
-                                'Last Trained': metrics.get('last_trained', 'Never')
-                            })
-
-                        if perf_data:
-                            st.dataframe(pd.DataFrame(perf_data),
-                                         use_container_width=True)
-                        else:
-                            st.info("📊 Modele nie zostały jeszcze wytrenowane")
-                    else:
-                        st.info("📊 Brak danych o performance modeli")
-                except Exception as e:
-                    st.warning(f"⚠️ Nie można pobrać performance modeli: {e}")
-
-                # FIXED: Profitability visualization instead of price prediction
-                st.subheader("📈 Wizualizacja Predykcji Profitability")
-
-                try:
-                    # Create profitability confidence chart
-                    fig_profit = go.Figure()
-
-                    # Show confidence levels
-                    confidence = prediction['confidence']
-                    prob_profitable = prediction.get(
-                        'probability_profitable', 0.5)
-
-                    # Confidence gauge
-                    fig_profit.add_trace(go.Indicator(
-                        mode="gauge+number+delta",
-                        value=confidence * 100,
-                        domain={'x': [0, 1], 'y': [0, 1]},
-                        title={'text': "ML Confidence"},
-                        delta={'reference': 50},
-                        gauge={
-                            'axis': {'range': [None, 100]},
-                            'bar': {'color': "green" if prediction['predicted_profitable'] else "red"},
-                            'steps': [
-                                {'range': [0, 50], 'color': "lightgray"},
-                                {'range': [50, 80], 'color': "yellow"},
-                                {'range': [80, 100], 'color': "green"}
-                            ],
-                            'threshold': {
-                                'line': {'color': "red", 'width': 4},
-                                'thickness': 0.75,
-                                'value': 70
-                            }
-                        }
-                    ))
-
-                    fig_profit.update_layout(
-                        height=400, title="Pewność Predykcji Profitability")
-                    st.plotly_chart(fig_profit, use_container_width=True)
-
-                    # Show recent profitability trend if available
-                    if 'profitable' in df.columns and len(df) >= 20:
-                        recent_df = df.tail(50)
-
-                        fig_trend = go.Figure()
-
-                        # Profitability over time
-                        fig_trend.add_trace(go.Scatter(
-                            x=recent_df['timestamp'],
-                            y=recent_df['profitable'].astype(int),
-                            mode='markers',
-                            name='Actual Profitability',
-                            marker=dict(
-                                color=[
-                                    'green' if p else 'red' for p in recent_df['profitable']],
-                                size=8
-                            )
-                        ))
-
-                        # Add current prediction
-                        fig_trend.add_shape(
-                            type="line",
-                            x0=recent_df['timestamp'].iloc[-1],
-                            y0=0,
-                            x1=recent_df['timestamp'].iloc[-1],
-                            y1=1,
-                            line=dict(color="blue", width=3, dash="dash"),
-                        )
-
-                        fig_trend.add_annotation(
-                            x=recent_df['timestamp'].iloc[-1],
-                            y=0.5,
-                            text=f"ML: {'Profitable' if prediction['predicted_profitable'] else 'Not Profitable'}",
-                            showarrow=True,
-                            arrowhead=2,
-                            arrowcolor="blue"
-                        )
-
-                        fig_trend.update_layout(
-                            title="Recent Profitability Trend + ML Prediction",
-                            xaxis_title="Time",
-                            yaxis_title="Profitable (1=Yes, 0=No)",
-                            yaxis=dict(tickmode='array', tickvals=[
-                                       0, 1], ticktext=['No', 'Yes']),
-                            height=400
-                        )
-
-                        st.plotly_chart(fig_trend, use_container_width=True)
-
-                except Exception as e:
-                    st.warning(
-                        f"⚠️ Nie można utworzyć wykresu profitability: {e}")
-
-            elif prediction and 'error' in prediction:
-                st.error(f"❌ ML Error: {prediction['error']}")
-            else:
-                st.error("❌ Nie udało się wygenerować predykcji ML")
-                st.write(f"🔍 Otrzymana odpowiedź: {prediction}")
 
         else:
             st.info(
