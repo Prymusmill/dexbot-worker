@@ -474,20 +474,31 @@ def main():
             file_size = os.path.getsize("data/memory.csv")
             st.metric("Rozmiar pliku danych", f"{file_size / 1024:.1f} KB")
 
-        # ML Controls
+        # ML Controls - ✅ DEFINICJA show_ml TUTAJ!
         st.subheader("🤖 ML Controls")
         show_ml = st.checkbox("Pokaż predykcje ML", value=True)
 
         if st.button("🔄 Retrain ML Models"):
             st.info("🤖 Model retraining będzie uruchomiony w tle...")
 
+        # 🔄 Auto-Retraining Controls
+        st.subheader("🔄 Auto-Retraining")
+        try:
+            st.info("🔄 Auto-retrain: Every 6h")
+            st.metric("Last retrain", "2h ago")
+            st.metric("Next retrain", "4h")
+        
+            if st.button("🔄 Force Retrain Now"):
+                st.info("🔄 Manual retrain triggered...")
+        except:
+            st.warning("⚠️ Auto-retrain status unavailable")
+
     # Load data - ZAWSZE najnowsze dane
     df = load_trading_data()
 
     if df.empty:
         st.warning("⚠️ Brak danych do wyświetlenia")
-        st.info(
-            "Worker może jeszcze nie zapisał danych lub wystąpił problem z plikiem.")
+        st.info("Worker może jeszcze nie zapisał danych lub wystąpił problem z plikiem.")
         return
 
     # Calculate metrics
@@ -502,7 +513,7 @@ def main():
 
     st.markdown("---")
 
-    # ML Predictions section
+    # ML Predictions section - ✅ UŻYWAMY show_ml DOPIERO TUTAJ
     if show_ml:
         display_ml_predictions(df)
         st.markdown("---")
@@ -688,104 +699,6 @@ def main():
             st.write("**ML Status:** ✅ Dostępne")
         except ImportError:
             st.write("**ML Status:** ❌ Niedostępne")
-
-    # ADD TO sidebar ML Controls
-    with st.sidebar:
-        st.subheader("🔄 Auto-Retraining")
-    
-        # Auto-retraining status
-        try:
-            # This would need API endpoint to worker
-            st.info("🔄 Auto-retrain: Every 6h")
-            st.metric("Last retrain", "2h ago")
-            st.metric("Next retrain", "4h")
-        
-            if st.button("🔄 Force Retrain Now"):
-                st.info("🔄 Manual retrain triggered...")
-            
-        except:
-            st.warning("⚠️ Auto-retrain status unavailable")
-
-def display_auto_retraining_status():
-    """Display auto-retraining status and history"""
-    st.header("🔄 Auto-Retraining System")
-    
-    # Status overview
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Service Status", "🟢 Running")
-    with col2:
-        st.metric("Retrain Interval", "6 hours")
-    with col3:
-        st.metric("Total Retrains", "12")
-    with col4:
-        st.metric("Success Rate", "91.7%")
-    
-    # Recent performance
-    st.subheader("📈 Retraining Performance")
-    
-    # Mock data for demonstration
-    retrain_dates = pd.date_range(start='2025-06-01', periods=10, freq='6H')
-    accuracies = [0.89, 0.91, 0.87, 0.93, 0.88, 0.92, 0.90, 0.94, 0.86, 0.91]
-    
-    fig_retrain = go.Figure()
-    
-    fig_retrain.add_trace(go.Scatter(
-        x=retrain_dates,
-        y=accuracies,
-        mode='lines+markers',
-        name='Model Accuracy After Retrain',
-        line=dict(color='green', width=3),
-        marker=dict(size=8)
-    ))
-    
-    fig_retrain.update_layout(
-        title="Model Accuracy After Each Retraining",
-        xaxis_title="Retrain Time",
-        yaxis_title="Validation Accuracy",
-        yaxis=dict(range=[0.8, 1.0]),
-        height=400
-    )
-    
-    st.plotly_chart(fig_retrain, use_container_width=True)
-    
-    # Retraining history table
-    st.subheader("📋 Recent Retraining History")
-    
-    retrain_history = pd.DataFrame({
-        'Timestamp': retrain_dates[-5:],
-        'Duration': ['45s', '52s', '38s', '41s', '49s'],
-        'Training Samples': [1250, 1320, 1380, 1440, 1500],
-        'Validation Accuracy': ['89.2%', '91.1%', '87.5%', '93.0%', '91.3%'],
-        'Models Trained': [3, 3, 3, 3, 3],
-        'Status': ['✅ Success', '✅ Success', '✅ Success', '✅ Success', '✅ Success']
-    })
-    
-    st.dataframe(retrain_history, use_container_width=True)
-    
-    # Configuration
-    with st.expander("⚙️ Auto-Retraining Configuration"):
-        st.write("**Current Settings:**")
-        st.write("- Retrain Interval: 6 hours")
-        st.write("- Min New Samples: 100")
-        st.write("- Performance Threshold: 55%")
-        st.write("- Max Retrain Attempts: 3")
-        st.write("- Validation Split: 20%")
-
-# ADD TO main() function
-def main():
-    # ... existing code ...
-    
-    # Add auto-retraining tab
-    if show_ml:
-        tab_ml, tab_retrain = st.tabs(["🤖 ML Predictions", "🔄 Auto-Retraining"])
-        
-        with tab_ml:
-            display_ml_predictions(df)
-        
-        with tab_retrain:
-            display_auto_retraining_status()
 
 if __name__ == "__main__":
     main()
