@@ -280,13 +280,13 @@ class OptimizedTradingBot:
             if ml_direction == 'unprofitable' and ml_confidence > 0.85:
                 contrarian_score = self.calculate_contrarian_score(self.latest_market_data)
                 
-                if contrarian_score >= 0.5:
+                if contrarian_score >= 0.7:
                     print(f"🔄 CONTRARIAN TRADE TRIGGERED!")
                     print(f"   • ML: {ml_direction.upper()} ({ml_confidence:.1%} confidence)")
                     print(f"   • Contrarian Score: {contrarian_score:.2f}")
                     print(f"   • Strategy: BETTING AGAINST ML PREDICTION")
                     return True
-                elif contrarian_score >= 0.3:
+                elif contrarian_score >= 0.5:
                     contrarian_probability = contrarian_score * 1.5
                     if random.random() < contrarian_probability:
                         print(f"🎲 CONTRARIAN GAMBLE: Score {contrarian_score:.2f}")
