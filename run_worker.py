@@ -143,33 +143,140 @@ class OptimizedTradingBot:
             self._log_enhanced_market_data(market_data)
             self._last_market_log = datetime.now()
 
-    def _log_enhanced_market_data(self, market_data: Dict):
-        """Enhanced market data logging with ML insights"""
-        price = market_data.get('price', 0)
-        rsi = market_data.get('rsi', 0)
-        volatility = market_data.get('volatility', 0.01)
-        trend = 'up' if market_data.get('price_change_24h', 0) > 0 else 'down'
+    # DODAJ DO _log_enhanced_market_data w run_worker.py
 
-        # ML insights
-        ml_info = ""
-        if self.ml_predictions:
-            direction = self.ml_predictions.get('direction', 'unknown')
-            confidence = self.ml_predictions.get('confidence', 0)
-            agreement = self.ml_predictions.get('model_agreement', 0)
-            ml_info = f", ML: {direction.upper()} ({confidence:.2f} conf, {agreement:.2f} agree)"
+def _log_enhanced_market_data(self, market_data: Dict):
+    """Enhanced market data logging with ML insights + CONTRARIAN INFO"""
+    price = market_data.get('price', 0)
+    rsi = market_data.get('rsi', 0)
+    volatility = market_data.get('volatility', 0.01)
+    trend = 'up' if market_data.get('price_change_24h', 0) > 0 else 'down'
+    price_change_24h = market_data.get('price_change_24h', 0)
 
-        # GPT insights
-        gpt_info = ""
-        if self.last_gpt_analysis:
-            gpt_action = self.last_gpt_analysis.get('action', 'UNKNOWN')
-            gpt_confidence = self.last_gpt_analysis.get('confidence', 0)
-            gpt_info = f", GPT: {gpt_action} ({gpt_confidence:.2f})"
+    # ML insights
+    ml_info = ""
+    contrarian_info = ""
+    
+    if self.ml_predictions:
+        direction = self.ml_predictions.get('direction', 'unknown')
+        confidence = self.ml_predictions.get('confidence', 0)
+        agreement = self.ml_predictions.get('model_agreement', 0)
+        ml_info = f", ML: {direction.upper()} ({confidence:.2f} conf, {agreement:.2f} agree)"
+        
+        # 🎯 CONTRARIAN ANALYSIS
+        if direction == 'unprofitable' and confidence > 0.85:
+            contrarian_score = 0
+            if rsi > 95:
+                contrarian_score += 0.4
+            elif rsi > 90:
+                contrarian_score += 0.2
+            elif rsi < 5:
+                contrarian_score += 0.4
+            elif rsi < 10:
+                contrarian_score += 0.2
+                
+            if abs(price_change_24h) > 10:
+                contrarian_score += 0.2
+            elif abs(price_change_24h) > 5:
+                contrarian_score += 0.1
+                
+            if confidence > 0.95:
+                contrarian_score += 0.2
+            elif confidence > 0.9:
+                contrarian_score += 0.1
+                
+            if contrarian_score >= 0.3:
+                contrarian_info = f", CONTRARIAN: {contrarian_score:.2f} score"
 
-        # Adaptive info
-        adaptive_info = f", Adaptive: {self.adaptive_cycle_size} trades/{self.adaptive_delay}s"
+    # GPT insights
+    gpt_info = ""
+    if self.last_gpt_analysis:
+        gpt_action = self.last_gpt_analysis.get('action', 'UNKNOWN')
+        gpt_confidence = self.last_gpt_analysis.get('confidence', 0)
+        gpt_info = f", GPT: {gpt_action} ({gpt_confidence:.2f})"
 
-        print(f"📊 Market: SOL/USDC ${price:.4f}, RSI: {rsi:.1f}, Vol: {volatility:.4f}, "
-              f"24h: {trend}{ml_info}{gpt_info}{adaptive_info}")
+    # 🎯 EXTREME CONDITIONS WARNING
+    extreme_info = ""
+    if rsi > 95:
+        extreme_info = " ⚠️ EXTREME OVERBOUGHT"
+    elif rsi < 5:
+        extreme_info = " ⚠️ EXTREME OVERSOLD"
+    elif rsi > 85:
+        extreme_info = " 📈 Very Overbought"
+    elif rsi < 15:
+        extreme_info = " 📉 Very Oversold"
+
+    # Adaptive info
+    adaptive_info = f", Adaptive: {self.adaptive_cycle_size} trades/{self.adaptive_delay}s"
+
+    print(f"📊 Market: SOL/USDC ${price:.4f}, RSI: {rsi:.1f}{extreme_info}, Vol: {volatility:.4f}, "
+          f"24h: {trend} ({price_change_24h:+.1f}%){ml_info}{contrarian_info}{gpt_info}{adaptive_info}")
+
+    def execute_enhanced_trade_cycle(self):
+        """Enhanced trading cycle with adaptive parameters + CONTRARIAN TRACKING"""
+        # ... existing code ...
+    
+        executed_in_cycle = 0
+        profitable_in_cycle = 0
+        contrarian_trades = 0  # NEW!
+        contrarian_wins = 0    # NEW!
+    
+        for i in range(cycle_size):
+            try:
+                print(f"🔹 Transaction {self.state['count'] + 1} (#{i + 1}/{cycle_size})")
+            
+                # Track if this is a contrarian trade
+                is_contrarian = False
+                if self.ml_predictions:
+                    ml_direction = self.ml_predictions.get('direction', 'neutral')
+                    ml_confidence = self.ml_predictions.get('confidence', 0)
+                    rsi = self.latest_market_data.get('rsi', 50) if self.latest_market_data else 50
+                
+                    if (ml_direction == 'unprofitable' and ml_confidence > 0.85 and 
+                        (rsi > 90 or rsi < 10)):
+                        is_contrarian = True
+
+                # Enhanced trading decision
+                if self.should_execute_trade_enhanced():
+                    # Execute trade with current market data
+                    trade_result = self.trade_executor.execute_trade(settings, self.latest_market_data)
+
+                    if trade_result and hasattr(trade_result, 'profitable'):
+                        executed_in_cycle += 1
+                        if trade_result.profitable:
+                            profitable_in_cycle += 1
+                        
+                        # Track contrarian performance
+                        if is_contrarian:
+                            contrarian_trades += 1
+                            if trade_result.profitable:
+                                contrarian_wins += 1
+                                print(f"🎯 CONTRARIAN WIN! ({contrarian_wins}/{contrarian_trades})")
+                            else:
+                                print(f"💥 Contrarian loss ({contrarian_wins}/{contrarian_trades})")
+
+                        self.state["count"] += 1
+                else:
+                    print("⏸️ Trade skipped - unfavorable conditions")
+
+                # ... rest of existing code ...
+
+            except Exception as e:
+                print(f"❌ Trade execution error: {e}")
+                continue
+
+        # Enhanced cycle performance with contrarian stats
+        cycle_win_rate = (profitable_in_cycle / executed_in_cycle) if executed_in_cycle > 0 else 0.5
+        contrarian_win_rate = (contrarian_wins / contrarian_trades) if contrarian_trades > 0 else 0.0
+    
+        # ... existing code ...
+    
+        print(f"✅ Enhanced cycle complete: {executed_in_cycle}/{cycle_size} executed, "
+              f"{profitable_in_cycle} profitable ({cycle_win_rate:.1%} cycle win rate)")
+    
+        if contrarian_trades > 0:
+            print(f"🔄 Contrarian trades: {contrarian_trades}, wins: {contrarian_wins} "
+                  f"({contrarian_win_rate:.1%} contrarian win rate)")
 
     def update_ml_predictions(self):
         """Enhanced ML predictions with ensemble + FIXED LOGGING"""  # ✅ FIXED: Proper indentation
@@ -521,7 +628,7 @@ class OptimizedTradingBot:
         }
 
     def should_execute_trade_enhanced(self) -> bool:
-        """Enhanced trading decision with ML and GPT integration"""
+        """Enhanced trading decision with ML, GPT integration AND CONTRARIAN LOGIC"""
         if not self.latest_market_data:
             return True  # Fallback
 
@@ -536,21 +643,78 @@ class OptimizedTradingBot:
         action = trading_decision.get('action', 'HOLD')
         confidence = trading_decision.get('confidence', 0.5)
 
+        # 🎯 CONTRARIAN TRADING LOGIC - NEW!
         if self.ml_predictions:
             ml_direction = self.ml_predictions.get('direction', 'neutral')
             ml_confidence = self.ml_predictions.get('confidence', 0)
+            rsi = self.latest_market_data.get('rsi', 50)
+            price_change_24h = self.latest_market_data.get('price_change_24h', 0)
+        
+            # CONTRARIAN STRATEGY - Bet against ML in extreme market conditions
+            if ml_direction == 'unprofitable' and ml_confidence > 0.85:
+                contrarian_score = 0
+                contrarian_reasons = []
+            
+                # RSI Extremes
+                if rsi > 95:  # Extremely overbought
+                    contrarian_score += 0.4
+                    contrarian_reasons.append(f"RSI extremely overbought ({rsi:.1f})")
+                elif rsi < 5:  # Extremely oversold  
+                    contrarian_score += 0.4
+                    contrarian_reasons.append(f"RSI extremely oversold ({rsi:.1f})")
+                elif rsi > 90:  # Very overbought
+                    contrarian_score += 0.2
+                    contrarian_reasons.append(f"RSI very overbought ({rsi:.1f})")
+                elif rsi < 10:  # Very oversold
+                    contrarian_score += 0.2
+                    contrarian_reasons.append(f"RSI very oversold ({rsi:.1f})")
+                
+                # Price momentum extremes
+                if abs(price_change_24h) > 10:  # Extreme 24h move
+                    contrarian_score += 0.2
+                    contrarian_reasons.append(f"Extreme 24h move ({price_change_24h:.1f}%)")
+                elif abs(price_change_24h) > 5:  # Large 24h move
+                    contrarian_score += 0.1
+                    contrarian_reasons.append(f"Large 24h move ({price_change_24h:.1f}%)")
+                
+                # ML confidence bonus
+                if ml_confidence > 0.95:  # Ultra-confident ML
+                    contrarian_score += 0.2
+                    contrarian_reasons.append(f"Ultra-confident ML ({ml_confidence:.1%})")
+                elif ml_confidence > 0.9:  # Very confident ML
+                    contrarian_score += 0.1
+                    contrarian_reasons.append(f"Very confident ML ({ml_confidence:.1%})")
+                
+                # CONTRARIAN EXECUTION
+                if contrarian_score >= 0.5:  # High contrarian confidence
+                    print(f"🔄 CONTRARIAN TRADE TRIGGERED!")
+                    print(f"   • ML: {ml_direction.upper()} ({ml_confidence:.1%} confidence)")
+                    print(f"   • Contrarian Score: {contrarian_score:.2f}")
+                    print(f"   • Reasons: {', '.join(contrarian_reasons)}")
+                    print(f"   • Strategy: BETTING AGAINST ML PREDICTION")
+                    return True
+                elif contrarian_score >= 0.3:  # Medium contrarian confidence
+                    contrarian_probability = contrarian_score * 1.5  # Boost probability
+                    if random.random() < contrarian_probability:
+                        print(f"🎲 CONTRARIAN GAMBLE: Score {contrarian_score:.2f}, Prob {contrarian_probability:.2f}")
+                        print(f"   • Reasons: {', '.join(contrarian_reasons)}")
+                        return True
+                    
+            # REGULAR ML SKIP LOGIC (if not contrarian)
             if ml_direction == 'unprofitable' and ml_confidence > 0.8:
-                print(
-                    f"🚫 ML Skip: {ml_direction} with {ml_confidence:.1%} confidence")
-                return False
+                # Check if contrarian didn't trigger
+                rsi = self.latest_market_data.get('rsi', 50)
+                if not (rsi > 90 or rsi < 10):  # Not extreme conditions
+                    print(f"🚫 ML Skip: {ml_direction} with {ml_confidence:.1%} confidence")
+                    return False
 
         # Market volatility check
         vol_threshold = settings.get("market_volatility_threshold", 0.05)
         if self.market_volatility > vol_threshold:
             confidence *= 0.8
 
-        # Final decision with confidence threshold
-        ml_threshold = settings.get("ml_confidence_threshold", 0.3)
+        # 🎯 LOWERED ML THRESHOLD (was 0.3, now 0.2)
+        ml_threshold = settings.get("ml_confidence_threshold", 0.2)  # Lowered!
 
         if action == 'BUY' or action == 'SELL':
             if confidence > 0.7:
@@ -559,12 +723,12 @@ class OptimizedTradingBot:
                 # Probabilistic execution based on confidence
                 return random.random() < confidence
             else:
-                return random.random() < 0.3  # Low probability fallback
+                return random.random() < 0.6  # INCREASED from 0.3!
         else:  # HOLD
-            return random.random() < 0.4  # Still some trading activity
+            return random.random() < 0.6  # INCREASED from 0.4!
 
     def _should_execute_trade_original(self) -> bool:
-        """Original trading decision logic as fallback"""
+        """Original trading decision logic as fallback - ENHANCED VERSION"""
         # Base market signals
         signals = self.trading_signals.analyze_market_conditions(
             self.latest_market_data)
@@ -574,55 +738,62 @@ class OptimizedTradingBot:
         enhanced_confidence = base_confidence
         ml_factor = 1.0
 
-        if self.ml_integration and self.ml_predictions and settings.get(
-                "ml_enabled", True):
+        if self.ml_integration and self.ml_predictions and settings.get("ml_enabled", True):
             try:
                 ml_confidence = self.ml_predictions.get('confidence', 0.5)
                 ml_direction = self.ml_predictions.get('direction', 'neutral')
-                model_agreement = self.ml_predictions.get(
-                    'model_agreement', 0.5)
+                model_agreement = self.ml_predictions.get('model_agreement', 0.5)
 
-                # Strong ML signals
-                if ml_confidence > 0.7 and model_agreement > 0.8:
+                # 🎯 AGGRESSIVE ML SIGNALS - LOWERED THRESHOLDS
+                if ml_confidence > 0.6 and model_agreement > 0.7:  # Lowered from 0.7 and 0.8
                     if ml_direction == 'up':
                         enhanced_confidence = min(base_confidence + 0.4, 1.0)
-                        ml_factor = 1.3
+                        ml_factor = 1.4  # Increased from 1.3
                     else:
-                        enhanced_confidence = max(base_confidence - 0.2, 0.1)
-                        ml_factor = 0.8
+                        enhanced_confidence = max(base_confidence - 0.15, 0.15)  # Less harsh penalty
+                        ml_factor = 0.85  # Less harsh from 0.8
 
-                # Moderate ML signals
-                elif ml_confidence > 0.5:
+                # 🚀 MODERATE ML SIGNALS - MORE AGGRESSIVE  
+                elif ml_confidence > 0.4:  # Lowered from 0.5
                     if ml_direction == 'up':
-                        enhanced_confidence = min(base_confidence + 0.2, 0.9)
-                        ml_factor = 1.1
+                        enhanced_confidence = min(base_confidence + 0.25, 0.9)  # Increased boost
+                        ml_factor = 1.2  # Increased from 1.1
                     else:
-                        enhanced_confidence = max(base_confidence - 0.1, 0.2)
-                        ml_factor = 0.9
+                        enhanced_confidence = max(base_confidence - 0.05, 0.25)  # Much less penalty
+                        ml_factor = 0.95  # Much less harsh from 0.9
 
                 # Log ML enhancement
-                if abs(enhanced_confidence - base_confidence) > 0.1:
+                if abs(enhanced_confidence - base_confidence) > 0.05:  # Lowered threshold
                     print(f"🧠 ML Enhanced: {base_confidence:.2f} → {enhanced_confidence:.2f} "
                           f"(ML: {ml_direction}, {ml_confidence:.2f}, agree: {model_agreement:.2f})")
 
             except Exception as e:
                 print(f"⚠️ ML decision enhancement error: {e}")
 
-        # Market volatility check
-        vol_threshold = settings.get("market_volatility_threshold", 0.05)
+        # 🎯 CONTRARIAN CHECK IN FALLBACK TOO
+        rsi = self.latest_market_data.get('rsi', 50)
+        if rsi > 90 or rsi < 10:  # Extreme RSI conditions
+            contrarian_boost = 0.2
+            enhanced_confidence = min(enhanced_confidence + contrarian_boost, 1.0)
+            print(f"🔄 Fallback Contrarian Boost: RSI={rsi:.1f}, boost={contrarian_boost}")
+
+        # Market volatility check - LESS HARSH
+        vol_threshold = settings.get("market_volatility_threshold", 0.03)  # Increased
         if self.market_volatility > vol_threshold:
-            enhanced_confidence *= 0.8
+            enhanced_confidence *= 0.85  # Less harsh from 0.8
 
-        # Final decision with confidence threshold
-        ml_threshold = settings.get("ml_confidence_threshold", 0.3)
+        # Final decision with LOWERED confidence threshold
+        ml_threshold = settings.get("ml_confidence_threshold", 0.5)  # Lowered
 
-        if enhanced_confidence > 0.6:
+        if enhanced_confidence > 0.5:  # Lowered from 0.6
             return True
         elif enhanced_confidence > ml_threshold:
             # Probabilistic execution based on confidence
             return random.random() < (enhanced_confidence * ml_factor)
         else:
-            return random.random() < 0.4  # Low probability fallback
+            # 🚀 INCREASED FALLBACK PROBABILITY 
+            fallback_prob = settings.get("fallback_trade_probability", 0.6)  # Increased from 0.4
+            return random.random() < fallback_prob
 
     def execute_enhanced_trade_cycle(self):
         """Enhanced trading cycle with adaptive parameters"""
