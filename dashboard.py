@@ -27,7 +27,7 @@ def load_trading_data():
             db_manager = get_db_manager()
 
             # FIXED: Pobierz tylko ostatnie 1000 transakcji dla dashboard!
-            df = db_manager.get_recent_transactions(limit=1000)  # ← ZMIANA!
+            df = db_manager.get_recent_transactions(limit=300)  # ← ZMIANA z 500!
 
             if len(df) > 100:
                 st.success(f"✅ Loaded {len(df)} recent transactions from PostgreSQL!")
@@ -66,7 +66,7 @@ def load_trading_data():
 
         df = pd.read_csv("data/memory.csv")
         # Przetwarzanie CSV - tylko ostatnie 1000
-        df = df.tail(1000)  # ← DODANE!
+        df = df.tail(500)  # ← DODANE!
         df['timestamp'] = pd.to_datetime(df['timestamp'])
         df['profitable'] = df['amount_out'] > df['amount_in']
         df['pnl'] = df['amount_out'] - df['amount_in']
@@ -130,6 +130,7 @@ def calculate_metrics(df):
 
 # dashboard.py - REMOVE signal timeout (line ~180-200)
 
+@st.cache_data(ttl=600) # Cache na 10 minut
 def display_ml_predictions(df):
     """Display ML predictions section - COMPLETE FIX"""
     st.header("🤖 Machine Learning Predictions")
@@ -476,7 +477,7 @@ def main():
 
         # ML Controls - ✅ DEFINICJA show_ml TUTAJ!
         st.subheader("🤖 ML Controls")
-        show_ml = st.checkbox("Pokaż predykcje ML", value=True)
+        show_ml = st.checkbox("Pokaż predykcje ML", value=False) 
 
         if st.button("🔄 Retrain ML Models"):
             st.info("🤖 Model retraining będzie uruchomiony w tle...")

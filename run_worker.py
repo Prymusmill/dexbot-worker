@@ -27,7 +27,7 @@ except ImportError as e:
 # GPT Analyzer import
 try:
     from ml.gpt_analyzer import setup_gpt_enhanced_trading, format_gpt_analysis_for_logging
-    GPT_AVAILABLE = True
+    GPT_AVAILABLE = False
     print("✅ GPT analyzer available")
 except ImportError as e:
     print(f"⚠️ GPT analyzer not available: {e}")
