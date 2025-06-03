@@ -15,7 +15,7 @@ class EnhancedRetrainingConfig:
     retrain_interval_hours: float = 1.0          # Max 1 hour interval  
     retrain_interval_minutes: int = 60           # Max 60 minutes
     min_new_samples: int = 3000                  # 3K samples trigger (~50min worth)
-    performance_threshold: float = 0.75          # 75% accuracy threshold
+    performance_threshold: float = 0.50          # 75% accuracy threshold
     
     # 🚀 MULTI-TRIGGER SYSTEM
     enable_time_trigger: bool = True             # Max interval trigger

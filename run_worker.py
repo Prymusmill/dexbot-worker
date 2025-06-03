@@ -136,7 +136,7 @@ class OptimizedTradingBot:
                 print(f"⚠️ Multi-asset signals failed: {e}")
                 self.multi_asset_signals = None
 
-        # Auto-retraining integration
+# Auto-retraining integration - 🚀 FIXED: Use settings.py values!
         self.auto_retrainer = None
         if ML_AVAILABLE and self.ml_integration is not None:
             try:
@@ -144,9 +144,9 @@ class OptimizedTradingBot:
                 self.auto_retrainer = setup_auto_retraining(
                     ml_integration=self.ml_integration,
                     db_manager=self.trade_executor.db_manager if hasattr(self.trade_executor, 'db_manager') else None,
-                    retrain_interval_hours=6,
-                    min_new_samples=100,
-                    performance_threshold=0.55
+                    retrain_interval_hours=settings.get("ml_retrain_hours", 1.0),  # 🚀 FROM SETTINGS!
+                    min_new_samples=settings.get("retrain_min_samples_trigger", 3000),  # 🚀 FROM SETTINGS!
+                    performance_threshold=settings.get("retrain_accuracy_threshold", 0.50)  # 🚀 FROM SETTINGS!
                 )
                 print("🔄 Auto-retraining service initialized")
             except Exception as e:
