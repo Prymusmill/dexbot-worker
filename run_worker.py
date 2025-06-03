@@ -24,6 +24,15 @@ except ImportError as e:
     print(f"❌ Import error: {e}")
     sys.exit(1)
 
+# DODAJ DO IMPORTÓW W run_worker.py (około linia 25)
+try:
+    from core.multi_asset_data import create_multi_asset_service, MultiAssetSignals
+    MULTI_ASSET_AVAILABLE = True
+    print("✅ Multi-asset modules available")
+except ImportError as e:
+    print(f"⚠️ Multi-asset modules not available: {e}")
+    MULTI_ASSET_AVAILABLE = False
+
 # GPT Analyzer import
 try:
     from ml.gpt_analyzer import setup_gpt_enhanced_trading, format_gpt_analysis_for_logging
@@ -46,7 +55,6 @@ except ImportError as e:
 STATE_FILE = "data/state.json"
 MEMORY_FILE = "data/memory.csv"
 
-
 class OptimizedTradingBot:
     def __init__(self):
         # Core trading attributes
@@ -56,13 +64,20 @@ class OptimizedTradingBot:
         self.trading_signals = TradingSignals()
         self.state = {"count": 0}
 
+        # 🚀 MULTI-ASSET ATTRIBUTES - NEW!
+        self.multi_asset_service = None
+        self.multi_asset_signals = None
+        self.supported_assets = ['SOL', 'ETH']  # Start with SOL + ETH
+        self.current_asset = 'SOL'  # Active trading asset
+        self.asset_data = {}  # Store data for all assets
+        
         # Enhanced ML attributes
         self.ml_predictions = {}
         self.ml_prediction_count = 0
         self.last_ml_training = None
         self.ml_performance_history = []
 
-        # Contrarian trading attributes - NEW!
+        # Contrarian trading attributes
         self.contrarian_trade_count = 0
         self.contrarian_wins = 0
 
@@ -104,6 +119,15 @@ class OptimizedTradingBot:
                 self.gpt_analyzer = None
                 self.gpt_enabled = False
 
+        # 🚀 MULTI-ASSET SIGNALS - NEW!
+        if MULTI_ASSET_AVAILABLE:
+            try:
+                self.multi_asset_signals = MultiAssetSignals()
+                print("📊 Multi-asset signal analyzer initialized")
+            except Exception as e:
+                print(f"⚠️ Multi-asset signals failed: {e}")
+                self.multi_asset_signals = None
+
         # Auto-retraining integration
         self.auto_retrainer = None
         if ML_AVAILABLE and self.ml_integration is not None:
@@ -128,6 +152,7 @@ class OptimizedTradingBot:
         print(f"   • GPT Analyzer: {'✅' if self.gpt_enabled else '❌'}")
         print(f"   • Auto-retrainer: {'✅' if self.auto_retrainer else '❌'}")
         print(f"   • Contrarian Trading: ✅ Enabled")
+        print(f"   • Multi-Asset: {'✅' if MULTI_ASSET_AVAILABLE else '❌'} ({len(self.supported_assets)} assets)")  # NEW!
 
     def on_market_data_update(self, market_data: Dict):
         """Enhanced callback with volatility tracking"""
@@ -506,106 +531,233 @@ class OptimizedTradingBot:
         except Exception as e:
             print(f"Stats logging error: {e}")
 
-    def start(self):
-        """Start enhanced trading bot with CONTRARIAN LOGIC"""
-        print("🚀 Starting OPTIMIZED DexBot with Enhanced ML & CONTRARIAN Trading...")
-        print(f"⏰ Start: {datetime.now()}")
-        print(f"🎯 Settings: {settings['trades_per_cycle']} trades/{settings['cycle_delay_seconds']}s")
-        print(f"🔄 CONTRARIAN: Enabled (RSI extremes + ML confidence)")
-
-        # Setup directories
-        os.makedirs("data", exist_ok=True)
-        os.makedirs("data/results", exist_ok=True)
-        if ML_AVAILABLE:
-            os.makedirs("ml", exist_ok=True)
-            os.makedirs("ml/models", exist_ok=True)
-
-        # Load state
-        self.load_state()
-        start_count = self.state["count"]
-
-        # Start market data service
-        print("🌐 Connecting to enhanced market data...")
-        self.market_service = create_market_data_service(self.on_market_data_update)
-
-        if not self.market_service:
-            print("⚠️ Market data connection failed - continuing in simulation mode")
-        else:
-            print("✅ Connected to live market data")
-            time.sleep(3)
-
-        # Initial ML setup
-        if ML_AVAILABLE and self.ml_integration and start_count >= 100:
-            print("🤖 Initializing enhanced ML predictions...")
-            self.update_ml_predictions()
-
-        print(f"🎯 Starting from transaction #{start_count + 1}")
-
-        # Main enhanced trading loop
-        cycle = 0
+    def on_multi_asset_update(self, asset_symbol: str, market_data: Dict):
+        """🚀 NEW: Multi-asset callback with contrarian analysis"""
         try:
-            while True:
-                cycle += 1
+            # Store data for all assets
+            self.asset_data[asset_symbol] = market_data
+            
+            # Update active trading asset data
+            if asset_symbol == self.current_asset:
+                self.latest_market_data = market_data
+                self.trade_executor.update_market_data(market_data)
+                self.market_volatility = market_data.get('volatility', 0.01)
+            
+            # Enhanced logging for multi-asset
+            price = market_data.get('price', 0)
+            rsi = market_data.get('rsi', 0)
+            price_change_24h = market_data.get('price_change_24h', 0)
+            
+            # Asset selection indicator
+            active_indicator = "🎯" if asset_symbol == self.current_asset else "📊"
+            
+            # RSI extremes detection for ANY asset
+            extreme_info = ""
+            contrarian_info = ""
+            
+            if rsi > 95:
+                extreme_info = " ⚠️ EXTREME OVERBOUGHT"
+            elif rsi < 5:
+                extreme_info = " ⚠️ EXTREME OVERSOLD"
+            elif rsi > 85:
+                extreme_info = " 📈 Very Overbought"
+            elif rsi < 15:
+                extreme_info = " 📉 Very Oversold"
+            
+            # Check contrarian conditions for this asset
+            if self.ml_predictions and asset_symbol == self.current_asset:
+                ml_direction = self.ml_predictions.get('direction', 'neutral')
+                ml_confidence = self.ml_predictions.get('confidence', 0)
+                
+                if ml_direction == 'unprofitable' and ml_confidence > 0.85:
+                    contrarian_score = self.calculate_contrarian_score(market_data)
+                    if contrarian_score >= 0.3:
+                        contrarian_info = f", CONTRARIAN: {contrarian_score:.2f}"
+            
+            # Log with multi-asset context (every 30 seconds to avoid spam)
+            if hasattr(self, '_last_multi_log'):
+                if (datetime.now() - self._last_multi_log).seconds >= 30:
+                    print(f"{active_indicator} {asset_symbol}: ${price:.4f}, RSI: {rsi:.1f}{extreme_info}, "
+                          f"24h: {price_change_24h:+.1f}%{contrarian_info}")
+                    self._last_multi_log = datetime.now()
+            else:
+                print(f"{active_indicator} {asset_symbol}: ${price:.4f}, RSI: {rsi:.1f}{extreme_info}, "
+                      f"24h: {price_change_24h:+.1f}%{contrarian_info}")
+                self._last_multi_log = datetime.now()
+                
+        except Exception as e:
+            print(f"❌ Error processing {asset_symbol} update: {e}")
 
-                # Execute enhanced trading cycle
-                cycle_stats = self.execute_enhanced_trade_cycle()
+    def select_best_trading_asset(self) -> str:
+        """🚀 NEW: Select best asset for trading based on signals"""
+        if not self.multi_asset_signals or len(self.asset_data) < 2:
+            return self.current_asset  # Fallback to current
+            
+        try:
+            # Generate signals for all assets
+            signals = self.multi_asset_signals.analyze_multi_asset_conditions(self.asset_data)
+            
+            # Get best asset
+            best_asset = self.multi_asset_signals.get_best_asset_to_trade(signals)
+            
+            if best_asset and best_asset != self.current_asset:
+                print(f"🔄 Asset switch: {self.current_asset} → {best_asset}")
+                self.current_asset = best_asset
+                
+                # Update latest_market_data to new asset
+                if best_asset in self.asset_data:
+                    self.latest_market_data = self.asset_data[best_asset]
+                    self.trade_executor.update_market_data(self.latest_market_data)
+                    
+            return self.current_asset
+            
+        except Exception as e:
+            print(f"⚠️ Asset selection error: {e}")
+            return self.current_asset
 
-                # Save state
+        def start(self):
+            """Start enhanced trading bot with MULTI-ASSET + CONTRARIAN LOGIC"""
+            print("🚀 Starting MULTI-ASSET DexBot with Enhanced ML & CONTRARIAN Trading...")
+            print(f"⏰ Start: {datetime.now()}")
+            print(f"🎯 Settings: {settings['trades_per_cycle']} trades/{settings['cycle_delay_seconds']}s")
+            print(f"🔄 CONTRARIAN: Enabled (RSI extremes + ML confidence)")
+            print(f"📊 MULTI-ASSET: {self.supported_assets} ({'✅' if MULTI_ASSET_AVAILABLE else '❌'})")
+
+            # Setup directories
+            os.makedirs("data", exist_ok=True)
+            os.makedirs("data/results", exist_ok=True)
+            if ML_AVAILABLE:
+                os.makedirs("ml", exist_ok=True)
+                os.makedirs("ml/models", exist_ok=True)
+
+            # Load state
+            self.load_state()
+            start_count = self.state["count"]
+
+            # 🚀 START MULTI-ASSET SERVICE
+            print("🌐 Connecting to multi-asset market data...")
+        
+            if MULTI_ASSET_AVAILABLE:
+                try:
+                    self.multi_asset_service = create_multi_asset_service(
+                        self.supported_assets, 
+                        self.on_multi_asset_update
+                    )
+                
+                    if self.multi_asset_service:
+                        print(f"✅ Multi-asset service connected: {self.supported_assets}")
+                        time.sleep(5)  # Wait for initial data
+                    else:
+                        print("⚠️ Multi-asset service failed - falling back to single asset")
+                        # Fallback to single asset
+                        self.market_service = create_market_data_service(self.on_market_data_update)
+                    
+                except Exception as e:
+                    print(f"⚠️ Multi-asset error: {e} - using single asset fallback")
+                    self.market_service = create_market_data_service(self.on_market_data_update)
+            else:
+                # Single asset fallback
+                print("⚠️ Multi-asset not available - using single asset mode")
+                self.market_service = create_market_data_service(self.on_market_data_update)
+            
+            if not self.multi_asset_service and not self.market_service:
+                print("⚠️ Market data connection failed - continuing in simulation mode")
+            else:
+                print("✅ Connected to live market data")
+
+            # Initial ML setup
+            if ML_AVAILABLE and self.ml_integration and start_count >= 100:
+                print("🤖 Initializing enhanced ML predictions...")
+                self.update_ml_predictions()
+
+            print(f"🎯 Starting from transaction #{start_count + 1}")
+            print(f"🎯 Active trading asset: {self.current_asset}")
+
+            # Main enhanced trading loop
+            cycle = 0
+            try:
+                while True:
+                    cycle += 1
+
+                    # 🚀 MULTI-ASSET: Select best asset every cycle
+                    if self.multi_asset_service and len(self.asset_data) >= 2:
+                        self.select_best_trading_asset()
+
+                    # Execute enhanced trading cycle
+                    cycle_stats = self.execute_enhanced_trade_cycle()
+
+                    # Save state
+                    if self.save_state():
+                        print(f"💾 State saved: {self.state['count']} transactions")
+
+                    # Enhanced session stats
+                    total_executed = self.state["count"] - start_count
+                    print(f"\n📈 Enhanced Session Stats:")
+                    print(f"   • New transactions: {total_executed}")
+                    print(f"   • Total transactions: {self.state['count']:,}")
+                    print(f"   • Cycles completed: {cycle}")
+                    print(f"   • Recent win rate: {self.recent_win_rate:.1%}")
+                    print(f"   • Contrarian trades: {self.contrarian_trade_count}")
+                    print(f"   • 🎯 Active asset: {self.current_asset}")
+
+                    # 🚀 MULTI-ASSET STATUS
+                    if self.multi_asset_service:
+                        print(f"   • 📊 Multi-asset status:")
+                        connection_status = self.multi_asset_service.get_connection_status()
+                        for asset, connected in connection_status.items():
+                            indicator = "✅" if connected else "❌"
+                            price = self.multi_asset_service.get_asset_price(asset)
+                            rsi = self.multi_asset_service.get_asset_rsi(asset)
+                            active = "🎯" if asset == self.current_asset else ""
+                            print(f"     {indicator} {asset}: ${price:.2f}, RSI: {rsi:.1f} {active}")
+
+                    if self.latest_market_data:
+                        price = self.latest_market_data.get('price', 0)
+                        rsi = self.latest_market_data.get('rsi', 50)
+                        contrarian_score = self.calculate_contrarian_score(self.latest_market_data)
+                        print(f"   • Current {self.current_asset} price: ${price:.4f}")
+                        print(f"   • RSI: {rsi:.1f} {'⚠️ EXTREME' if rsi > 90 or rsi < 10 else ''}")
+                        print(f"   • Contrarian Score: {contrarian_score:.2f}")
+
+                    # Enhanced ML status
+                    if self.ml_predictions:
+                        try:
+                            direction = self.ml_predictions.get('direction', 'unknown')
+                            confidence = self.ml_predictions.get('confidence', 0)
+                            print(f"   • ML Forecast ({self.current_asset}): {direction.upper()} ({confidence:.2f})")
+                        except Exception as e:
+                            print(f"   • ML Display Error: {e}")
+
+                    # Log performance stats every 5 cycles
+                    if cycle % 5 == 0:
+                        self.log_performance_stats()
+
+                    # Adaptive delay between cycles
+                    print(f"⏳ Enhanced break: {self.adaptive_delay}s before next cycle...")
+                    time.sleep(self.adaptive_delay)
+
+            except KeyboardInterrupt:
+                print("\n🛑 Multi-asset bot stopped by user")
+            except Exception as e:
+                print(f"\n💥 Unexpected error: {e}")
+                import traceback
+                traceback.print_exc()
+            finally:
+                # Cleanup
+                if self.multi_asset_service:
+                    self.multi_asset_service.stop_tracking()
+                elif self.market_service:
+                    self.market_service.stop_stream()
+
                 if self.save_state():
-                    print(f"💾 State saved: {self.state['count']} transactions")
+                    print(f"💾 Final state saved: {self.state['count']} transactions")
 
-                # Enhanced session stats
-                total_executed = self.state["count"] - start_count
-                print(f"\n📈 Enhanced Session Stats:")
-                print(f"   • New transactions: {total_executed}")
+                print(f"\n🏁 Enhanced Multi-Asset Bot Session Complete:")
                 print(f"   • Total transactions: {self.state['count']:,}")
-                print(f"   • Cycles completed: {cycle}")
                 print(f"   • Recent win rate: {self.recent_win_rate:.1%}")
                 print(f"   • Contrarian trades: {self.contrarian_trade_count}")
-
-                if self.latest_market_data:
-                    price = self.latest_market_data.get('price', 0)
-                    rsi = self.latest_market_data.get('rsi', 50)
-                    contrarian_score = self.calculate_contrarian_score(self.latest_market_data)
-                    print(f"   • Current SOL price: ${price:.4f}")
-                    print(f"   • RSI: {rsi:.1f} {'⚠️ EXTREME' if rsi > 90 or rsi < 10 else ''}")
-                    print(f"   • Contrarian Score: {contrarian_score:.2f}")
-
-                # Enhanced ML status
-                if self.ml_predictions:
-                    try:
-                        direction = self.ml_predictions.get('direction', 'unknown')
-                        confidence = self.ml_predictions.get('confidence', 0)
-                        print(f"   • ML Forecast: {direction.upper()} ({confidence:.2f})")
-                    except Exception as e:
-                        print(f"   • ML Display Error: {e}")
-
-                # Log performance stats every 5 cycles
-                if cycle % 5 == 0:
-                    self.log_performance_stats()
-
-                # Adaptive delay between cycles
-                print(f"⏳ Enhanced break: {self.adaptive_delay}s before next cycle...")
-                time.sleep(self.adaptive_delay)
-
-        except KeyboardInterrupt:
-            print("\n🛑 Optimized bot stopped by user")
-        except Exception as e:
-            print(f"\n💥 Unexpected error: {e}")
-            import traceback
-            traceback.print_exc()
-        finally:
-            # Cleanup
-            if self.market_service:
-                self.market_service.stop_stream()
-
-            if self.save_state():
-                print(f"💾 Final state saved: {self.state['count']} transactions")
-
-            print(f"\n🏁 Enhanced Bot Session Complete:")
-            print(f"   • Total transactions: {self.state['count']:,}")
-            print(f"   • Recent win rate: {self.recent_win_rate:.1%}")
-            print(f"   • Contrarian trades: {self.contrarian_trade_count}")
+                print(f"   • Assets tracked: {self.supported_assets}")
+                print(f"   • Final active asset: {self.current_asset}")
 
 
 if __name__ == "__main__":
