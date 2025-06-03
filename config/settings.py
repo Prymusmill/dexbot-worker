@@ -30,14 +30,14 @@ SETTINGS = {
     "adaptive_retraining": True,                    # Enable smart retraining logic
     "retrain_max_interval_minutes": 60,            # Never wait longer than 1h
     "retrain_min_samples_trigger": 3000,           # Trigger at 3K new samples (~50min)
-    "retrain_accuracy_threshold": 0.75,            # Retrain if accuracy drops below 75%
+    "retrain_accuracy_threshold": 0.50,            # Retrain if accuracy drops below 75%
     "retrain_volatility_trigger": 0.05,            # Retrain on 5%+ volatility spike
     "retrain_rsi_extremes": [5, 95],               # Retrain on RSI extremes
     "retrain_smart_scheduling": True,              # Avoid training during high activity
     "retrain_force_on_market_change": True,        # Force retrain on major market shifts
 
     # 🚀 ADVANCED ML QUALITY CONTROLS - NEW!
-    "ml_model_quality_threshold": 0.70,            # Minimum model accuracy to use
+    "ml_model_quality_threshold": 0.50,            # Minimum model accuracy to use
     "ml_ensemble_min_agreement": 0.60,             # Minimum model agreement (60%)
     "ml_prediction_confidence_min": 0.65,          # Don't use predictions below 65%
     "ml_reality_check_enabled": True,              # Enable reality checks on predictions

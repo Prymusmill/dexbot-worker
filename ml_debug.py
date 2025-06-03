@@ -2,8 +2,8 @@
 import pandas as pd
 import numpy as np
 from database.db_manager import get_db_manager
-import matplotlib.pyplot as plt
-import seaborn as sns
+#import matplotlib.pyplot as plt
+#import seaborn as sns
 
 
 def diagnose_ml_data():
