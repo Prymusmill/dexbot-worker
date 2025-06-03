@@ -67,9 +67,17 @@ class OptimizedTradingBot:
         # 🚀 MULTI-ASSET ATTRIBUTES - NEW!
         self.multi_asset_service = None
         self.multi_asset_signals = None
-        self.supported_assets = ['SOL', 'ETH']  # Start with SOL + ETH
+        self.supported_assets = ['SOL', 'ETH', 'BTC']  # ← DODAJ 'BTC'!
         self.current_asset = 'SOL'  # Active trading asset
         self.asset_data = {}  # Store data for all assets
+
+        # 🚀 PORTFOLIO ALLOCATION - NEW!
+        self.portfolio_allocation = {
+            'SOL': 0.4,   # 40% allocation
+            'ETH': 0.35,  # 35% allocation  
+            'BTC': 0.25   # 25% allocation
+        }
+        self.trade_counts = {'SOL': 0, 'ETH': 0, 'BTC': 0}  # Track trades per asset
         
         # Enhanced ML attributes
         self.ml_predictions = {}
@@ -354,6 +362,9 @@ class OptimizedTradingBot:
                         if trade_result.profitable:
                             profitable_in_cycle += 1
                         
+                        # 🚀 TRACK PORTFOLIO ALLOCATION - NEW!
+                        self.trade_counts[self.current_asset] += 1
+                        
                         # Track contrarian performance
                         if is_contrarian:
                             contrarian_trades += 1
@@ -588,33 +599,75 @@ class OptimizedTradingBot:
         except Exception as e:
             print(f"❌ Error processing {asset_symbol} update: {e}")
 
+    def get_portfolio_target_asset(self) -> str:
+        """🚀 NEW: Select asset based on portfolio allocation"""
+        try:
+            # Calculate current allocation based on trade counts
+            total_trades = sum(self.trade_counts.values())
+            
+            if total_trades == 0:
+                return 'SOL'  # Start with SOL
+            
+            # Find most underallocated asset
+            max_deficit = 0
+            target_asset = self.current_asset
+            
+            for asset, target_allocation in self.portfolio_allocation.items():
+                current_allocation = self.trade_counts[asset] / total_trades
+                deficit = target_allocation - current_allocation
+                
+                if deficit > max_deficit:
+                    max_deficit = deficit
+                    target_asset = asset
+            
+            return target_asset
+            
+        except Exception as e:
+            print(f"⚠️ Portfolio allocation error: {e}")
+            return self.current_asset
+
     def select_best_trading_asset(self) -> str:
-        """🚀 NEW: Select best asset for trading based on signals"""
+        """🚀 ENHANCED: Select best asset combining signals + portfolio allocation"""
         if not self.multi_asset_signals or len(self.asset_data) < 2:
-            return self.current_asset  # Fallback to current
+            # Fallback to portfolio allocation
+            return self.get_portfolio_target_asset()
             
         try:
-            # Generate signals for all assets
+            # Get signal-based best asset
             signals = self.multi_asset_signals.analyze_multi_asset_conditions(self.asset_data)
+            signal_best_asset = self.multi_asset_signals.get_best_asset_to_trade(signals)
             
-            # Get best asset
-            best_asset = self.multi_asset_signals.get_best_asset_to_trade(signals)
+            # Get portfolio-based target asset
+            portfolio_target_asset = self.get_portfolio_target_asset()
             
-            if best_asset and best_asset != self.current_asset:
-                print(f"🔄 Asset switch: {self.current_asset} → {best_asset}")
-                self.current_asset = best_asset
+            # Decision logic: portfolio allocation wins unless signal is very strong
+            final_asset = portfolio_target_asset
+            
+            if signal_best_asset and signal_best_asset in signals:
+                signal_confidence = signals[signal_best_asset].get('confidence', 0)
+                
+                # If signal is very strong (>0.7), override portfolio allocation
+                if signal_confidence > 0.7:
+                    final_asset = signal_best_asset
+                    print(f"🎯 Signal override: {portfolio_target_asset} → {signal_best_asset} (confidence: {signal_confidence:.2f})")
+                else:
+                    print(f"📊 Portfolio allocation: {final_asset} (signal: {signal_best_asset}, conf: {signal_confidence:.2f})")
+            
+            # Execute asset switch if needed
+            if final_asset != self.current_asset:
+                print(f"🔄 Asset switch: {self.current_asset} → {final_asset}")
+                self.current_asset = final_asset
                 
                 # Update latest_market_data to new asset
-                if best_asset in self.asset_data:
-                    self.latest_market_data = self.asset_data[best_asset]
+                if final_asset in self.asset_data:
+                    self.latest_market_data = self.asset_data[final_asset]
                     self.trade_executor.update_market_data(self.latest_market_data)
                     
             return self.current_asset
             
         except Exception as e:
-            print(f"⚠️ Asset selection error: {e}")
-            return self.current_asset
-
+            print(f"⚠️ Enhanced asset selection error: {e}")
+            return self.get_portfolio_target_asset()
     def start(self):
         """Start enhanced trading bot with MULTI-ASSET + CONTRARIAN LOGIC"""
         print("🚀 Starting MULTI-ASSET DexBot with Enhanced ML & CONTRARIAN Trading...")
@@ -699,6 +752,16 @@ class OptimizedTradingBot:
                 print(f"   • Recent win rate: {self.recent_win_rate:.1%}")
                 print(f"   • Contrarian trades: {self.contrarian_trade_count}")
                 print(f"   • 🎯 Active asset: {self.current_asset}")
+
+                # 🚀 PORTFOLIO ALLOCATION STATUS - NEW!
+                total_trades = sum(self.trade_counts.values())
+                if total_trades > 0:
+                    print(f"   • 📊 Portfolio allocation:")
+                    for asset, count in self.trade_counts.items():
+                        current_pct = (count / total_trades) * 100
+                        target_pct = self.portfolio_allocation[asset] * 100
+                        status = "✅" if abs(current_pct - target_pct) < 10 else "⚠️"
+                        print(f"     {status} {asset}: {count} trades ({current_pct:.1f}% vs {target_pct:.1f}% target)")
 
                 # 🚀 MULTI-ASSET STATUS
                 if self.multi_asset_service:
