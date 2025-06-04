@@ -1,4 +1,4 @@
-# database/db_manager.py - PostgreSQL Integration for DexBot (FIXED)
+# database/db_manager.py - PostgreSQL Integration for DexBot (FIXED CRITICAL BUG)
 import os
 import psycopg2
 import psycopg2.extras  # DODANE: Potrzebne dla Json()
@@ -181,14 +181,21 @@ class DatabaseManager:
                 try:
                     # SQLAlchemy uses different parameter style
                     sqlalchemy_query = query.replace('%s', ':limit')
-                    # FIX: Use sqlalchemy_query instead of query + dict params
+                    # 🔧 FIXED: Use query variable instead of sqlalchemy_query
                     df = pd.read_sql_query(sqlalchemy_query, self.sqlalchemy_engine, params={'limit': limit})
+                    
+                    if len(df) > 0:
+                        df['timestamp'] = pd.to_datetime(df['timestamp'])
+                        print(f"✅ Retrieved {len(df)} recent transactions via SQLAlchemy")
+                    else:
+                        print("⚠️ No recent transactions found")
                     return df
+                    
                 except Exception as e:
                     print(f"⚠️ SQLAlchemy query failed: {e}")
             
             # Fallback to psycopg2
-            df = pd.read_sql_query(sqlalchemy_query, self.sqlalchemy_engine, params={'limit': limit})
+            df = pd.read_sql_query(query, self.connection, params=(limit,))
 
             if len(df) > 0:
                 df['timestamp'] = pd.to_datetime(df['timestamp'])
