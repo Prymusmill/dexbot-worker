@@ -35,7 +35,7 @@ SETTINGS = {
     "memory_limit": 10000,              # Increased for multi-asset data
 
     # ENHANCED: ML Configuration
-    "ml_enabled": False,
+    "ml_enabled": True,
     "ml_confidence_threshold": 0.65,    # Lowered from 0.75 for more activity
     "ml_retrain_hours": 2.0,            # More frequent retraining
     "adaptive_trading": True,

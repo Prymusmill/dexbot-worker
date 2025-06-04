@@ -175,23 +175,20 @@ class DatabaseManager:
                 ORDER BY timestamp DESC
                 LIMIT %s;
             """
-            
+        
             # Try SQLAlchemy first (better pandas support)
             if self.sqlalchemy_engine:
                 try:
                     # SQLAlchemy uses different parameter style
                     sqlalchemy_query = query.replace('%s', ':limit')
+                    # FIX: Use sqlalchemy_query instead of query + dict params
                     df = pd.read_sql_query(sqlalchemy_query, self.sqlalchemy_engine, params={'limit': limit})
-                    
-                    if len(df) > 0:
-                        df['timestamp'] = pd.to_datetime(df['timestamp'])
-                        print(f"✅ Retrieved {len(df)} recent transactions via SQLAlchemy")
                     return df
                 except Exception as e:
-                    print(f"⚠️ SQLAlchemy recent query failed: {e}, falling back to psycopg2")
+                    print(f"⚠️ SQLAlchemy query failed: {e}")
             
             # Fallback to psycopg2
-            df = pd.read_sql_query(query, self.connection, params=(limit,))
+            df = pd.read_sql_query(sqlalchemy_query, self.sqlalchemy_engine, params={'limit': limit})
 
             if len(df) > 0:
                 df['timestamp'] = pd.to_datetime(df['timestamp'])
