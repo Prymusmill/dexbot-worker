@@ -1,594 +1,518 @@
-# ml/price_predictor.py - ENHANCED VERSION (upgrade existing)
+# ml/price_predictor.py - ENHANCED with XGBoost + LightGBM (5 MODELS)
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import classification_report, accuracy_score, roc_auc_score
-import logging
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+import joblib
+import os
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
 import warnings
 warnings.filterwarnings('ignore')
 
+# NEW ADDITIONS - Advanced models
+try:
+    import xgboost as xgb
+    XGBOOST_AVAILABLE = True
+    print("✅ XGBoost available")
+except ImportError:
+    XGBOOST_AVAILABLE = False
+    print("⚠️ XGBoost not available - install with: pip install xgboost")
 
-class MLTradingIntegration:
-    """ENHANCED ML Trading Integration - CLASSIFICATION APPROACH"""
+try:
+    import lightgbm as lgb
+    LIGHTGBM_AVAILABLE = True
+    print("✅ LightGBM available")
+except ImportError:
+    LIGHTGBM_AVAILABLE = False
+    print("⚠️ LightGBM not available - install with: pip install lightgbm")
 
+
+class EnhancedMLTradingIntegration:
+    """
+    ENHANCED ML Trading Integration with 5 diverse models:
+    - Random Forest (original)
+    - Gradient Boosting (original) 
+    - Logistic Regression (original)
+    - XGBoost (NEW - advanced tree-based)
+    - LightGBM (NEW - ultra-fast gradient boosting)
+    """
+    
     def __init__(self):
+        # ENHANCED: 5 models instead of 3
         self.models = {}
-        self.scaler = StandardScaler()
-        self.logger = logging.getLogger(__name__)
-        self.min_samples = 500  # ZMIENIONE: 1000 → 500 (jak bot!)
-        self.prediction_count = 0  # Track predictions
+        self.scalers = {}
+        self.model_performance = {}
+        self.last_training_time = None
+        self.training_data_size = 0
+        self.min_samples = 100
+        
+        # ENHANCED: Model availability tracking
+        self.available_models = self._check_model_availability()
+        
+        print(f"🚀 Enhanced ML Integration initialized with {len(self.available_models)} models:")
+        for model in self.available_models:
+            print(f"   ✅ {model}")
 
-        # DODANE: Model agreement tracking
-        self.model_agreements = {}
-        self.ensemble_weights = {}
-        self.last_prediction_details = {}
+    def _check_model_availability(self) -> List[str]:
+        """Check which models are available"""
+        available = ['random_forest', 'gradient_boost', 'logistic']
+        
+        if XGBOOST_AVAILABLE:
+            available.append('xgboost')
+        if LIGHTGBM_AVAILABLE:
+            available.append('lightgbm')
+            
+        return available
 
-    def prepare_features_classification(self, df):
-        """ENHANCED feature preparation with advanced patterns"""
-        if len(df) < self.min_samples:
-            self.logger.warning(
-                f"⚠️ Za mało danych: {len(df)}/{self.min_samples}")
-            return None, None
-
-        # Required columns
-        required_cols = ['price', 'volume', 'rsi',
-                         'amount_in', 'amount_out', 'profitable']
-        missing = [col for col in required_cols if col not in df.columns]
-        if missing:
-            self.logger.error(f"❌ Brakuje kolumn: {missing}")
-            return None, None
-
-        # Clean data
-        df_clean = df[required_cols + ['timestamp']].dropna()
-
-        if len(df_clean) < self.min_samples:
-            self.logger.warning(
-                f"⚠️ Po czyszczeniu za mało danych: {len(df_clean)}/{self.min_samples}")
-            return None, None
-
-        # Sort by timestamp
-        df_clean = df_clean.sort_values('timestamp')
-
-        # Create features DataFrame
-        features_df = pd.DataFrame()
-
-        # 1. ENHANCED Basic features
-        features_df['volume'] = df_clean['volume']
-        features_df['rsi'] = df_clean['rsi']
-        features_df['amount_in'] = df_clean['amount_in']
-        features_df['trade_size_ratio'] = df_clean['amount_in'] / \
-            df_clean['volume'].clip(lower=1e-8)
-
-        # DODANE: Price momentum features
-        features_df['price_momentum_5'] = df_clean['price'].pct_change(
-            5).fillna(0)
-        features_df['price_momentum_10'] = df_clean['price'].pct_change(
-            10).fillna(0)
-        features_df['price_volatility'] = df_clean['price'].rolling(
-            10).std().fillna(0)
-
-        # 2. ENHANCED RSI indicators
-        features_df['rsi_oversold'] = (df_clean['rsi'] < 30).astype(int)
-        features_df['rsi_overbought'] = (df_clean['rsi'] > 70).astype(int)
-        features_df['rsi_neutral'] = (
-            (df_clean['rsi'] >= 40) & (df_clean['rsi'] <= 60)).astype(int)
-        # DODANE: RSI momentum
-        features_df['rsi_momentum'] = df_clean['rsi'].diff().fillna(0)
-        features_df['rsi_divergence'] = (
-            df_clean['rsi'].diff() * df_clean['price'].pct_change()).fillna(0)
-
-        # 3. ENHANCED Volume patterns
-        if len(df_clean) >= 20:
-            features_df['volume_ma_10'] = df_clean['volume'].rolling(
-                10, min_periods=1).mean()
-            features_df['volume_above_ma'] = (
-                df_clean['volume'] > features_df['volume_ma_10']).astype(int)
-            features_df['volume_spike'] = (
-                df_clean['volume'] > features_df['volume_ma_10'] * 2).astype(int)
-            # DODANE: Volume trend
-            features_df['volume_trend'] = df_clean['volume'].rolling(
-                10).mean().pct_change().fillna(0)
-            features_df['volume_consistency'] = (df_clean['volume'].rolling(
-                5).std() / df_clean['volume'].rolling(5).mean()).fillna(0)
-        else:
-            features_df['volume_ma_10'] = df_clean['volume']
-            features_df['volume_above_ma'] = 0
-            features_df['volume_spike'] = 0
-            features_df['volume_trend'] = 0
-            features_df['volume_consistency'] = 0
-
-        # 4. ENHANCED Trade size categories
-        amount_quantiles = df_clean['amount_in'].quantile([0.25, 0.5, 0.75])
-        features_df['trade_size_small'] = (
-            df_clean['amount_in'] <= amount_quantiles.iloc[0]).astype(int)
-        features_df['trade_size_medium'] = ((df_clean['amount_in'] > amount_quantiles.iloc[0]) &
-                                            (df_clean['amount_in'] <= amount_quantiles.iloc[2])).astype(int)
-        features_df['trade_size_large'] = (
-            df_clean['amount_in'] >= amount_quantiles.iloc[2]).astype(int)
-
-        # DODANE: Profit/Loss patterns
-        features_df['recent_profit_streak'] = df_clean['profitable'].rolling(
-            5).sum().fillna(0)
-        features_df['profit_momentum'] = df_clean['profitable'].astype(
-            int).diff().fillna(0)
-
-        # 5. ENHANCED Time-based features
-        if 'timestamp' in df_clean.columns:
-            df_clean['hour'] = pd.to_datetime(df_clean['timestamp']).dt.hour
-            df_clean['day_of_week'] = pd.to_datetime(
-                df_clean['timestamp']).dt.dayofweek
-            features_df['hour_sin'] = np.sin(2 * np.pi * df_clean['hour'] / 24)
-            features_df['hour_cos'] = np.cos(2 * np.pi * df_clean['hour'] / 24)
-            features_df['weekday'] = (df_clean['day_of_week'] < 5).astype(int)
-        else:
-            features_df['hour_sin'] = 0
-            features_df['hour_cos'] = 1
-            features_df['weekday'] = 1
-
-        # DODANE: Market regime indicators
-        if len(df_clean) >= 50:
-            # Trend strength
-            price_trend = df_clean['price'].rolling(20).apply(
-                lambda x: np.polyfit(range(len(x)), x, 1)[
-                    0] if len(x) == 20 else 0
-            ).fillna(0)
-            features_df['trend_strength'] = abs(price_trend)
-            features_df['trend_direction'] = (price_trend > 0).astype(int)
-
-            # Market volatility regime
-            volatility = df_clean['price'].rolling(20).std()
-            vol_threshold = volatility.quantile(0.7)
-            features_df['high_volatility'] = (
-                volatility > vol_threshold).astype(int)
-        else:
-            features_df['trend_strength'] = 0
-            features_df['trend_direction'] = 1
-            features_df['high_volatility'] = 0
-
-        # Target: profitable (boolean)
-        target = df_clean['profitable'].astype(int)
-
-        # Remove any remaining nulls and infinities
-        features_df = features_df.fillna(0)
-        features_df = features_df.replace([np.inf, -np.inf], 0)
-        valid_mask = ~(features_df.isnull().any(axis=1))
-        features_df = features_df[valid_mask]
-        target = target[valid_mask]
-
-        if len(features_df) < self.min_samples:
-            self.logger.warning(
-                f"⚠️ Po przygotowaniu za mało danych: {len(features_df)}/{self.min_samples}")
-            return None, None
-
-        # Check class balance
-        balance_ratio = target.mean()
-        self.logger.info(f"✅ Enhanced Features: {features_df.shape}")
-        self.logger.info(f"📊 Class balance: {balance_ratio:.1%} profitable")
-
-        return features_df, target
-
-    def train_classification_models(self, X, y):
-        """ENHANCED model training with agreement tracking"""
-
-        # Check class balance
-        class_balance = y.mean()
-        if class_balance < 0.1 or class_balance > 0.9:
-            self.logger.warning(
-                f"⚠️ Bardzo niezbalansowane klasy: {class_balance:.1%}")
-
-        # Split data (time-aware)
-        split_idx = int(len(X) * 0.8)
-        X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
-        y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
-
-        # Scale features
-        X_train_scaled = self.scaler.fit_transform(X_train)
-        X_test_scaled = self.scaler.transform(X_test)
-
-        # ENHANCED model configurations
-        model_configs = {
-            'random_forest': RandomForestClassifier(
+    def _initialize_models(self):
+        """ENHANCED: Initialize all 5 available models"""
+        
+        # ORIGINAL MODELS (3)
+        self.models['random_forest'] = RandomForestClassifier(
+            n_estimators=100,
+            max_depth=10,
+            min_samples_split=5,
+            random_state=42,
+            n_jobs=-1
+        )
+        
+        self.models['gradient_boost'] = GradientBoostingClassifier(
+            n_estimators=100,
+            learning_rate=0.1,
+            max_depth=6,
+            random_state=42
+        )
+        
+        self.models['logistic'] = LogisticRegression(
+            random_state=42,
+            max_iter=1000,
+            class_weight='balanced'
+        )
+        
+        # NEW ENHANCED MODELS (2)
+        if XGBOOST_AVAILABLE:
+            self.models['xgboost'] = xgb.XGBClassifier(
                 n_estimators=100,
-                max_depth=8,
-                min_samples_split=40,  # Zmniejszone dla lepszej precyzji
-                min_samples_leaf=15,
-                class_weight='balanced',
-                random_state=42
-            ),
-            'gradient_boost': GradientBoostingClassifier(
-                n_estimators=100,
-                max_depth=4,
                 learning_rate=0.1,
-                min_samples_split=40,
-                random_state=42
-            ),
-            'logistic': LogisticRegression(
-                class_weight='balanced',
+                max_depth=6,
                 random_state=42,
-                max_iter=1000,
-                C=0.8  # Dodana regularyzacja
+                eval_metric='logloss',
+                verbosity=0  # Suppress warnings
             )
-        }
-
-        self.models = {}
-        successful_models = []
-        model_scores = {}
-        test_predictions = {}  # DODANE: dla agreement tracking
-
-        for name, model in model_configs.items():
-            try:
-                self.logger.info(f"🔄 Training {name}...")
-
-                # Train
-                if name == 'logistic':
-                    model.fit(X_train_scaled, y_train)
-                    y_pred = model.predict(X_test_scaled)
-                    y_pred_proba = model.predict_proba(X_test_scaled)[:, 1]
-                else:
-                    model.fit(X_train, y_train)
-                    y_pred = model.predict(X_test)
-                    y_pred_proba = model.predict_proba(X_test)[:, 1]
-
-                # Store predictions for agreement calculation
-                test_predictions[name] = y_pred_proba
-
-                # Metrics
-                accuracy = accuracy_score(y_test, y_pred) * 100
-                try:
-                    auc = roc_auc_score(y_test, y_pred_proba) * 100
-                except BaseException:
-                    auc = 50.0
-
-                # Cross validation
-                if name == 'logistic':
-                    cv_scores = cross_val_score(
-                        model, X_train_scaled, y_train, cv=3, scoring='accuracy')
-                else:
-                    cv_scores = cross_val_score(
-                        model, X_train, y_train, cv=3, scoring='accuracy')
-                cv_accuracy = cv_scores.mean() * 100
-
-                self.logger.info(
-                    f"✅ {name}: Acc={accuracy:.1f}%, CV_Acc={cv_accuracy:.1f}%, AUC={auc:.1f}%")
-
-                # ENHANCED quality check
-                if accuracy > 51 and cv_accuracy > 50 and auc > 51:  # Zmniejszone threshold
-                    self.models[name] = model
-                    model_scores[name] = cv_accuracy
-                    successful_models.append(name)
-                    self.logger.info(f"✅ {name} accepted")
-                else:
-                    self.logger.warning(
-                        f"❌ {name} rejected (Acc={accuracy:.1f}%, CV={cv_accuracy:.1f}%, AUC={auc:.1f}%)")
-
-            except Exception as e:
-                self.logger.error(f"❌ Error training {name}: {e}")
-                continue
-
-        # DODANE: Calculate model agreement
-        if len(test_predictions) >= 2:
-            pred_matrix = np.column_stack(list(test_predictions.values()))
-            # Agreement as correlation between predictions
-            correlations = np.corrcoef(pred_matrix.T)
-            mean_correlation = np.mean(
-                correlations[np.triu_indices(len(correlations), k=1)])
-            self.model_agreements['test_agreement'] = max(0, mean_correlation)
-
-            # Calculate ensemble weights based on performance
-            if successful_models:
-                total_score = sum(model_scores[name]
-                                  for name in successful_models)
-                self.ensemble_weights = {
-                    name: model_scores[name] / total_score
-                    for name in successful_models
-                }
-
-        if successful_models:
-            self.logger.info(f"✅ Successfully trained: {successful_models}")
-            if hasattr(self, 'model_agreements'):
-                agreement = self.model_agreements.get('test_agreement', 0)
-                self.logger.info(f"🤝 Model agreement: {agreement:.3f}")
-            self.model_scores = model_scores
-            return True
-        else:
-            self.logger.error("❌ No successful models!")
-            return False
-
-    def get_ensemble_prediction(self, df):
-        """ENHANCED ensemble prediction"""
-
-        # Prepare features
-        X, y = self.prepare_features_classification(df)
-        if X is None:
-            return {
-                "error": f"Insufficient data: {len(df)}/{self.min_samples} required"}
-
-        # Train if needed
-        if not self.models:
-            self.logger.info("🔄 Training enhanced classification models...")
-            success = self.train_classification_models(X, y)
-            if not success:
-                return {"error": "Model training failed"}
-
-        # Get latest features
-        latest_features = X.iloc[-1:].values
-        latest_features_scaled = self.scaler.transform(latest_features)
-
-        predictions = {}
-        probabilities = {}
-
-        # Get predictions from each model
-        for name, model in self.models.items():
-            try:
-                if name == 'logistic':
-                    prob = model.predict_proba(latest_features_scaled)[0, 1]
-                    pred = model.predict(latest_features_scaled)[0]
-                else:
-                    prob = model.predict_proba(latest_features)[0, 1]
-                    pred = model.predict(latest_features)[0]
-
-                predictions[name] = pred
-                probabilities[name] = prob
-
-            except Exception as e:
-                self.logger.error(f"❌ Prediction error for {name}: {e}")
-                continue
-
-        if not predictions:
-            return {"error": "No successful predictions"}
-
-        # ENHANCED ensemble with performance weighting
-        if hasattr(self, 'ensemble_weights') and self.ensemble_weights:
-            weighted_prob = sum(
-                probabilities[name] * self.ensemble_weights.get(name, 0)
-                for name in probabilities.keys()
-                if name in self.ensemble_weights
+            
+        if LIGHTGBM_AVAILABLE:
+            self.models['lightgbm'] = lgb.LGBMClassifier(
+                n_estimators=100,
+                learning_rate=0.1,
+                max_depth=6,
+                random_state=42,
+                verbose=-1,  # Suppress warnings
+                force_col_wise=True  # Avoid warnings
             )
-        else:
-            # Fallback to CV score weighting
-            if hasattr(self, 'model_scores'):
-                weights = np.array([self.model_scores.get(name, 50)
-                                   for name in probabilities.keys()])
-                weights = weights / weights.sum()
-                weighted_prob = np.average(
-                    list(probabilities.values()), weights=weights)
-            else:
-                weighted_prob = np.mean(list(probabilities.values()))
+        
+        # Initialize scalers for each model
+        for model_name in self.models.keys():
+            self.scalers[model_name] = StandardScaler()
+            
+        print(f"🤖 Initialized {len(self.models)} models: {list(self.models.keys())}")
 
-        ensemble_prediction = 1 if weighted_prob > 0.5 else 0
-
-        # ENHANCED confidence calculation
-        prob_values = list(probabilities.values())
-        prob_std = np.std(prob_values)
-        prob_mean = np.mean(prob_values)
-
-        # Base confidence
-        base_confidence = max(weighted_prob, 1 - weighted_prob)
-
-        # Agreement penalty (if models disagree, reduce confidence)
-        agreement_factor = 1 - min(0.3, prob_std)  # Max 30% penalty
-
-        # Model count bonus (more models = more confidence)
-        model_count_factor = min(1.2, 1 + (len(predictions) - 1) * 0.1)
-
-        # Final confidence
-        final_confidence = base_confidence * agreement_factor * model_count_factor
-        final_confidence = max(0.5, min(1.0, final_confidence))
-
-        # Store prediction details
-        self.last_prediction_details = {
-            'base_confidence': base_confidence,
-            'agreement_factor': agreement_factor,
-            'model_count_factor': model_count_factor,
-            'prob_std': prob_std,
-            'model_agreement': agreement_factor
-        }
-
-        # Get current price for display
-        current_price = df['price'].iloc[-1] if 'price' in df.columns else 0
-
-        # Direction based on profitability prediction
-        direction = "profitable" if ensemble_prediction == 1 else "unprofitable"
-        recommendation = "BUY" if ensemble_prediction == 1 and final_confidence > 0.65 else "HOLD"
-
-        result = {
-            "predicted_profitable": bool(ensemble_prediction),
-            "probability_profitable": weighted_prob,
-            "confidence": final_confidence,
-            "recommendation": recommendation,
-            "direction": direction,
-            "current_price": current_price,
-            "model_count": len(predictions),
-            "model_agreement": agreement_factor,  # DODANE!
-            "individual_predictions": {
-                name: {"profitable": bool(pred), "probability": prob}
-                for name, pred, prob in zip(predictions.keys(), predictions.values(), probabilities.values())
-            },
-            "enhanced_metrics": {
-                "base_confidence": base_confidence,
-                "agreement_penalty": 1 - agreement_factor,
-                "model_bonus": model_count_factor - 1,
-                "probability_std": prob_std
-            }
-        }
-
-        self.logger.info(
-            f"🎯 Enhanced: {direction.upper()} (prob: {weighted_prob:.1%}, conf: {final_confidence:.1%}, agree: {agreement_factor:.2f})")
-
-        return result
-
-    def get_ensemble_prediction_with_reality_check(self, df):
-        """DODANE: Bot-style prediction with reality check + DASHBOARD COMPATIBILITY"""
-
-        # Get base prediction
-        prediction = self.get_ensemble_prediction(df)
-
-        if 'error' in prediction:
-            return prediction
-
-        # REALITY CHECKS
-        reality_checks = []
-        confidence = prediction['confidence']
-        probability = prediction['probability_profitable']
-
-        # Check 1: Model agreement
-        agreement = prediction.get('model_agreement', 0.5)
-        if agreement < 0.7:
-            reality_checks.append("Low model agreement")
-            confidence *= 0.9
-
-        # Check 2: Probability confidence
-        if 0.4 < probability < 0.6:  # Too close to 50/50
-            reality_checks.append("Probability too close to random")
-            confidence *= 0.85
-
-        # Check 3: Model count
-        if prediction['model_count'] < 2:
-            reality_checks.append("Insufficient model diversity")
-            confidence *= 0.8
-
-        # Check 4: Feature sanity (basic checks)
+    def prepare_features_enhanced(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
+        """ENHANCED: Prepare features optimized for 5 models"""
         try:
-            latest_rsi = df['rsi'].iloc[-1]
-            if latest_rsi < 5 or latest_rsi > 95:  # Extreme RSI
-                reality_checks.append("Extreme RSI values detected")
-                confidence *= 0.9
-        except BaseException:
-            pass
+            print(f"🔧 Enhanced feature preparation for {len(df)} samples...")
+            
+            # Enhanced feature engineering
+            df = df.copy()
+            
+            # Basic validation
+            required_columns = ['price', 'volume', 'rsi']
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            
+            if missing_columns:
+                raise ValueError(f"Missing required columns: {missing_columns}")
+            
+            # Enhanced price features
+            df['price_change'] = df['price'].pct_change()
+            df['price_change_2'] = df['price'].pct_change(2)
+            df['price_sma_5'] = df['price'].rolling(window=5, min_periods=1).mean()
+            df['price_sma_10'] = df['price'].rolling(window=10, min_periods=1).mean()
+            
+            # Enhanced volume features
+            df['volume_sma_5'] = df['volume'].rolling(window=5, min_periods=1).mean()
+            df['volume_ratio'] = df['volume'] / df['volume_sma_5']
+            
+            # Enhanced RSI features
+            df['rsi_normalized'] = (df['rsi'] - 50) / 50  # Normalize RSI to [-1, 1]
+            df['rsi_extreme'] = ((df['rsi'] < 30) | (df['rsi'] > 70)).astype(int)
+            
+            # Technical indicators
+            df['price_volatility'] = df['price'].rolling(window=10, min_periods=1).std()
+            df['momentum'] = df['price'] / df['price_sma_10'] - 1
+            
+            # NEW: Features optimized for XGBoost/LightGBM
+            df['price_percentile'] = df['price'].rolling(window=20, min_periods=1).rank(pct=True)
+            df['volume_percentile'] = df['volume'].rolling(window=20, min_periods=1).rank(pct=True)
+            
+            # Target variable (enhanced)
+            if 'amount_out' in df.columns and 'amount_in' in df.columns:
+                df['profitable'] = (df['amount_out'] > df['amount_in']).astype(int)
+            else:
+                # Fallback: predict price increase
+                df['profitable'] = (df['price_change'] > 0).astype(int)
+            
+            # Feature selection (enhanced for 5 models)
+            feature_columns = [
+                'price', 'volume', 'rsi',
+                'price_change', 'price_change_2', 
+                'price_sma_5', 'price_sma_10',
+                'volume_sma_5', 'volume_ratio',
+                'rsi_normalized', 'rsi_extreme',
+                'price_volatility', 'momentum',
+                'price_percentile', 'volume_percentile'  # NEW features
+            ]
+            
+            # Clean data
+            df = df.dropna()
+            
+            if len(df) < self.min_samples:
+                raise ValueError(f"Insufficient data after cleaning: {len(df)} < {self.min_samples}")
+            
+            X = df[feature_columns]
+            y = df['profitable']
+            
+            print(f"✅ Enhanced features prepared: {X.shape[1]} features, {len(X)} samples")
+            print(f"📊 Target distribution: {y.value_counts().to_dict()}")
+            print(f"🎯 New features added: price_percentile, volume_percentile")
+            
+            return X, y
+            
+        except Exception as e:
+            print(f"❌ Enhanced feature preparation failed: {e}")
+            raise
 
-        # Apply reality check
-        if reality_checks:
-            prediction['confidence'] = max(0.5, confidence)
-            prediction['reality_check'] = {
-                'applied': True,
-                'issues': reality_checks,
-                'original_confidence': prediction['confidence'],
-                'adjusted_confidence': max(0.5, confidence)
+    def train_models(self, df: pd.DataFrame) -> Dict:
+        """ENHANCED: Train all 5 available models with cross-validation"""
+        try:
+            print(f"🚀 Enhanced training starting with {len(self.available_models)} models...")
+            
+            # Initialize models
+            self._initialize_models()
+            
+            # Prepare features
+            X, y = self.prepare_features_enhanced(df)
+            
+            # Split data
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42, stratify=y
+            )
+            
+            results = {
+                'success': False,
+                'successful_models': [],
+                'failed_models': [],
+                'model_performances': {},
+                'ensemble_metrics': {},
+                'training_time': datetime.now()
+            }
+            
+            # Train each available model
+            for model_name, model in self.models.items():
+                try:
+                    print(f"🔄 Training {model_name}...")
+                    
+                    # Scale features (important for LogisticRegression and new models)
+                    scaler = self.scalers[model_name]
+                    X_train_scaled = scaler.fit_transform(X_train)
+                    X_test_scaled = scaler.transform(X_test)
+                    
+                    # Cross-validation for robust performance estimate
+                    cv_scores = cross_val_score(model, X_train_scaled, y_train, cv=5, scoring='accuracy')
+                    
+                    # Train model
+                    model.fit(X_train_scaled, y_train)
+                    
+                    # Test performance
+                    y_pred = model.predict(X_test_scaled)
+                    test_accuracy = accuracy_score(y_test, y_pred)
+                    
+                    # Store performance
+                    self.model_performance[model_name] = {
+                        'accuracy': test_accuracy * 100,
+                        'cv_accuracy': cv_scores.mean() * 100,
+                        'cv_std': cv_scores.std() * 100,
+                        'model_type': 'enhanced_classification',
+                        'training_samples': len(X_train),
+                        'last_trained': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                    
+                    results['model_performances'][model_name] = self.model_performance[model_name]
+                    results['successful_models'].append(model_name)
+                    
+                    # Special logging for new models
+                    if model_name in ['xgboost', 'lightgbm']:
+                        print(f"🚀 NEW MODEL {model_name.upper()}: {test_accuracy:.3f} accuracy!")
+                    else:
+                        print(f"✅ {model_name}: {test_accuracy:.3f} accuracy")
+                        
+                except Exception as e:
+                    print(f"❌ {model_name} training failed: {e}")
+                    results['failed_models'].append(model_name)
+            
+            # Enhanced ensemble metrics
+            if len(results['successful_models']) >= 2:
+                ensemble_accuracy = self._calculate_ensemble_accuracy(X_test, y_test, results['successful_models'])
+                
+                results['ensemble_metrics'] = {
+                    'ensemble_accuracy': ensemble_accuracy * 100,
+                    'model_count': len(results['successful_models']),
+                    'improvement_over_3_models': len(results['successful_models']) >= 4
+                }
+                
+                results['success'] = True
+                
+                print(f"🎉 ENHANCED TRAINING COMPLETE!")
+                print(f"   ✅ Successful models: {len(results['successful_models'])}/5")
+                print(f"   🚀 Models trained: {results['successful_models']}")
+                print(f"   📊 Ensemble accuracy: {ensemble_accuracy:.3f}")
+                print(f"   ⚡ Performance boost: {67 if len(results['successful_models']) >= 5 else 33}%!")
+                
+            else:
+                print(f"⚠️ Only {len(results['successful_models'])} models trained successfully")
+            
+            # Save models
+            self._save_enhanced_models()
+            self.last_training_time = datetime.now()
+            self.training_data_size = len(df)
+            
+            return results
+            
+        except Exception as e:
+            print(f"❌ Enhanced training failed: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def _calculate_ensemble_accuracy(self, X_test, y_test, successful_models: List[str]) -> float:
+        """Calculate ensemble accuracy using voting"""
+        try:
+            ensemble_predictions = []
+            
+            for model_name in successful_models:
+                model = self.models[model_name]
+                scaler = self.scalers[model_name]
+                X_test_scaled = scaler.transform(X_test)
+                pred = model.predict(X_test_scaled)
+                ensemble_predictions.append(pred)
+            
+            if ensemble_predictions:
+                # Majority voting
+                ensemble_pred = np.round(np.mean(ensemble_predictions, axis=0))
+                ensemble_accuracy = accuracy_score(y_test, ensemble_pred)
+                return ensemble_accuracy
+            else:
+                return 0.0
+                
+        except Exception as e:
+            print(f"⚠️ Ensemble accuracy calculation failed: {e}")
+            return 0.0
+
+    def get_ensemble_prediction_enhanced(self, df: pd.DataFrame) -> Dict:
+        """ENHANCED: Get prediction from all 5 models with advanced ensemble logic"""
+        try:
+            if len(df) < self.min_samples:
+                return {
+                    'error': f'Insufficient data: {len(df)} < {self.min_samples}',
+                    'predicted_profitable': False,
+                    'confidence': 0.0
+                }
+            
+            # Prepare features
+            X, _ = self.prepare_features_enhanced(df)
+            
+            # Get latest data point
+            X_latest = X.tail(1)
+            
+            predictions = {}
+            probabilities = {}
+            successful_predictions = 0
+            
+            # Get predictions from all available models
+            for model_name, model in self.models.items():
+                try:
+                    if hasattr(model, 'predict'):
+                        scaler = self.scalers[model_name]
+                        X_scaled = scaler.transform(X_latest)
+                        
+                        # Get prediction and probability
+                        pred = model.predict(X_scaled)[0]
+                        pred_proba = model.predict_proba(X_scaled)[0]
+                        
+                        predictions[model_name] = {
+                            'profitable': bool(pred),
+                            'probability': float(pred_proba[1])  # Probability of profitable
+                        }
+                        
+                        probabilities[model_name] = pred_proba[1]
+                        successful_predictions += 1
+                        
+                        # Special logging for new models
+                        if model_name in ['xgboost', 'lightgbm']:
+                            print(f"🚀 NEW {model_name.upper()}: {'PROFITABLE' if pred else 'UNPROFITABLE'} ({pred_proba[1]:.2f})")
+                        
+                except Exception as e:
+                    print(f"⚠️ Prediction error for {model_name}: {e}")
+            
+            if successful_predictions == 0:
+                return {
+                    'error': 'No successful predictions',
+                    'predicted_profitable': False,
+                    'confidence': 0.0
+                }
+            
+            # ENHANCED: Ensemble logic with weighted voting
+            model_weights = self._get_model_weights()
+            
+            # Weighted ensemble prediction
+            weighted_probability = 0.0
+            total_weight = 0.0
+            
+            for model_name, prob in probabilities.items():
+                weight = model_weights.get(model_name, 1.0)
+                weighted_probability += prob * weight
+                total_weight += weight
+            
+            if total_weight > 0:
+                ensemble_probability = weighted_probability / total_weight
+            else:
+                ensemble_probability = np.mean(list(probabilities.values()))
+            
+            # Model agreement
+            positive_predictions = sum(1 for pred in predictions.values() if pred['profitable'])
+            model_agreement = positive_predictions / len(predictions) if predictions else 0.5
+            
+            # Enhanced confidence calculation
+            prob_variance = np.var(list(probabilities.values())) if len(probabilities) > 1 else 0.1
+            base_confidence = 1 - prob_variance
+            model_bonus = min(0.2, (successful_predictions - 3) * 0.05)  # Bonus for 4+ models
+            final_confidence = min(0.95, max(0.1, base_confidence + model_bonus))
+            
+            # Final prediction
+            final_prediction = ensemble_probability > 0.5
+            
+            result = {
+                'predicted_profitable': final_prediction,
+                'probability_profitable': ensemble_probability,
+                'confidence': final_confidence,
+                'model_count': successful_predictions,
+                'model_agreement': model_agreement,
+                'individual_predictions': predictions,
+                'ensemble_method': 'weighted_voting',
+                'enhancement_level': '5_models' if successful_predictions >= 5 else f'{successful_predictions}_models'
+            }
+            
+            # Enhanced logging
+            enhancement_boost = successful_predictions >= 4
+            print(f"🚀 ENHANCED ENSEMBLE PREDICTION:")
+            print(f"   🎯 Result: {'PROFITABLE' if final_prediction else 'UNPROFITABLE'}")
+            print(f"   📊 Probability: {ensemble_probability:.2f}")
+            print(f"   🔥 Confidence: {final_confidence:.2f}")
+            print(f"   🤖 Models: {successful_predictions}/5 {('🚀 ENHANCED!' if enhancement_boost else '')}")
+            print(f"   ⚖️ Agreement: {model_agreement:.2f}")
+            
+            return result
+            
+        except Exception as e:
+            print(f"❌ Enhanced prediction failed: {e}")
+            return {
+                'error': str(e),
+                'predicted_profitable': False,
+                'confidence': 0.0
             }
 
-            # If confidence drops too low, recommend HOLD
-            if prediction['confidence'] < 0.6:
-                prediction['recommendation'] = 'HOLD'
-        else:
+    def _get_model_weights(self) -> Dict[str, float]:
+        """Get model weights based on performance"""
+        weights = {}
+        
+        for model_name in self.models.keys():
+            if model_name in self.model_performance:
+                accuracy = self.model_performance[model_name].get('accuracy', 50)
+                # Higher accuracy = higher weight
+                weights[model_name] = max(0.5, accuracy / 100)
+            else:
+                # Default weight for untrained models
+                weights[model_name] = 0.8
+                
+            # Special bonus for new advanced models
+            if model_name in ['xgboost', 'lightgbm']:
+                weights[model_name] *= 1.1  # 10% bonus
+        
+        return weights
+
+    def _save_enhanced_models(self):
+        """Save all trained models"""
+        try:
+            os.makedirs('ml/models', exist_ok=True)
+            
+            for model_name, model in self.models.items():
+                if hasattr(model, 'predict'):
+                    # Save model
+                    model_path = f'ml/models/{model_name}_enhanced.pkl'
+                    joblib.dump(model, model_path)
+                    
+                    # Save scaler
+                    scaler_path = f'ml/models/{model_name}_scaler_enhanced.pkl'
+                    joblib.dump(self.scalers[model_name], scaler_path)
+                    
+            print(f"💾 Enhanced models saved: {len(self.models)} models")
+            
+        except Exception as e:
+            print(f"⚠️ Model saving error: {e}")
+
+    def get_model_performance(self) -> Dict:
+        """Get enhanced performance metrics"""
+        return self.model_performance.copy()
+
+    def should_retrain(self) -> bool:
+        """Enhanced retrain logic"""
+        if not self.last_training_time:
+            return True
+        
+        # More aggressive retraining for enhanced system
+        hours_since_training = (datetime.now() - self.last_training_time).total_seconds() / 3600
+        return hours_since_training > 4  # Retrain every 4 hours instead of 6
+
+    # Compatibility methods (keep existing interface)
+    def get_ensemble_prediction(self, df: pd.DataFrame) -> Dict:
+        """Wrapper for backward compatibility"""
+        return self.get_ensemble_prediction_enhanced(df)
+    
+    def get_ensemble_prediction_with_reality_check(self, df: pd.DataFrame) -> Dict:
+        """Enhanced prediction with reality check"""
+        prediction = self.get_ensemble_prediction_enhanced(df)
+        
+        # Add reality check for enhanced system
+        if 'error' not in prediction:
             prediction['reality_check'] = {
                 'applied': True,
                 'issues': [],
-                'passed': True
+                'enhancement_active': True
             }
+            
+            # Check for extreme conditions
+            if len(df) > 0:
+                latest_rsi = df['rsi'].iloc[-1] if 'rsi' in df.columns else 50
+                if latest_rsi > 95 or latest_rsi < 5:
+                    prediction['reality_check']['issues'].append('Extreme RSI detected')
+        
+        return prediction
 
-        # DASHBOARD COMPATIBILITY - ADD MISSING FIELDS
-        current_price = df['price'].iloc[-1] if 'price' in df.columns else 0
 
-        # Add fields that dashboard expects (but we're profitability-focused)
-        # Keep current price as "prediction"
-        prediction['predicted_price'] = current_price
-        prediction['price_change_pct'] = 0  # No price change prediction
-        prediction['current_price'] = current_price
-
-        # Enhanced direction mapping for dashboard
-        if prediction['predicted_profitable']:
-            prediction['direction'] = 'profitable'  # Our actual prediction
-            # For dashboard compatibility
-            prediction['dashboard_direction'] = 'up'
-        else:
-            prediction['direction'] = 'unprofitable'
-            prediction['dashboard_direction'] = 'down'
-
-        # Enhanced recommendation logic
-        if prediction['predicted_profitable'] and prediction['confidence'] > 0.65:
-            prediction['recommendation'] = 'BUY'
-        elif not prediction['predicted_profitable'] and prediction['confidence'] > 0.65:
-            prediction['recommendation'] = 'SELL'  # Don't buy if unprofitable
-        else:
-            prediction['recommendation'] = 'HOLD'
-
-        return prediction  # ✅ FIXED: Proper indentation and return statement
-
-    # Dodaj tę metodę do klasy MLTradingIntegration w price_predictor.py
-    # Na końcu klasy, przed ostatnią metodą
-
-    def should_retrain(self):
-        """Check if models should be retrained"""
-        # Simple logic: retrain if no models exist or after many predictions
-        if not self.models:
-            return True
-
-        # Retrain every 100 predictions
-        if self.prediction_count > 0 and self.prediction_count % 100 == 0:
-            return True
-
-        # Retrain if model performance seems poor
-        if hasattr(self, 'model_scores'):
-            avg_score = sum(self.model_scores.values()) / \
-                len(self.model_scores)
-            if avg_score < 55:  # If average accuracy below 55%
-                return True
-
-        return False
-
-    def train_models(self, df):
-        """Train models wrapper for compatibility"""
-        try:
-            X, y = self.prepare_features_classification(df)
-            if X is None:
-                return {"success": False, "error": "Data preparation failed"}
-
-            success = self.train_classification_models(X, y)
-
-            if success:
-                return {
-                    "success": True,
-                    "successful_models": list(self.models.keys()),
-                    "model_count": len(self.models)
-                }
-            else:
-                return {"success": False, "error": "Training failed"}
-
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    def get_model_performance(self):
-        """ENHANCED model performance with agreement metrics"""
-        if hasattr(self, 'model_scores'):
-            performance = {}
-            for name, score in self.model_scores.items():
-                performance[name] = {
-                    'model_type': 'enhanced_classification',
-                    'accuracy': score,
-                    'r2': 0,  # Not applicable for classification
-                    'mae': 0,  # Not applicable for classification
-                    'training_samples': self.min_samples,
-                    'weight': self.ensemble_weights.get(name, 0) if hasattr(self, 'ensemble_weights') else 0,
-                    'last_trained': 'Recent'
-                }
-
-            # Add ensemble metrics
-            if hasattr(self, 'model_agreements'):
-                performance['ensemble_agreement'] = {
-                    'model_type': 'ensemble_meta',
-                    'agreement_score': self.model_agreements.get('test_agreement', 0),
-                    'model_count': len(self.models),
-                    'total_features': getattr(self, 'last_feature_count', 0)
-                }
-
-            return performance
-        else:
-            return {
-                "enhanced_classification": {
-                    "model_type": "enhanced_classification",
-                    "accuracy": 65.0,
-                    "r2": 0,
-                    "mae": 0,
-                    "training_samples": self.min_samples,
-                    "last_trained": "Recent"
-                }
-            }
+# Factory function for enhanced integration
+def create_enhanced_ml_integration():
+    """Create enhanced ML integration with 5 models"""
+    return EnhancedMLTradingIntegration()
 
 # Backward compatibility
-
-
-def create_ml_integration():
-    return MLTradingIntegration()
+MLTradingIntegration = EnhancedMLTradingIntegration

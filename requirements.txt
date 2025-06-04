@@ -7,9 +7,9 @@ plotly
 websocket-client
 requests
 scikit-learn
-#tensorflow
-#keras
 joblib
 psycopg2-binary
 openai
 python-dotenv
+xgboost
+lightgbm
