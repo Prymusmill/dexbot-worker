@@ -10,6 +10,9 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 import traceback
+from .price_predictor_macos_safe import MacOSSafeMLIntegration as DirectionalMLTradingIntegration
+
+__all__ = ["DirectionalMLTradingIntegration"]
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings('ignore')
@@ -123,9 +126,12 @@ class DirectionalDataLoader:
             optional_cols = ['volume', 'volatility', 'price_change_24h']
             directional_cols = ['action', 'direction', 'pnl', 'profitable']
             
-            # Ensure required columns exist
-            for col in required_cols:
-                if col not in df.columns:
+            # Znajdź miejsce, gdzie występuje błąd i dodaj:
+            for col in X.columns:
+                if X[col].dtype == 'object':
+                    sample_val = X[col].dropna().iloc[0] if not X[col].dropna().empty else None
+                    if isinstance(sample_val, (datetime.date, datetime.datetime)):
+                        X[col] = X[col].apply(lambda x: (pd.Timestamp(x) - pd.Timestamp('1970-01-01')).total_seconds() / 86400 if pd.notnull(x) else np.nan)
                     print(f"⚠️ Missing required column {col}, creating default...")
                     if col == 'price':
                         df[col] = 100.0
