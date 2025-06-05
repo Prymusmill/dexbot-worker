@@ -79,8 +79,8 @@ SETTINGS = {
     "min_position_multiplier": 0.5,     # Min 0.5x normal position size
 
     # Market condition awareness
-    "min_win_rate_threshold": 0.45,     # Stop trading if win rate drops below 45%
-    "model_accuracy_threshold": 0.50,   # Only use models with 50%+ accuracy
+    "min_win_rate_threshold": 0.35,     # Stop trading if win rate drops below 45%
+    "model_accuracy_threshold": 0.45,   # Only use models with 50%+ accuracy
     "recent_performance_weight": 0.7,   # Weight recent performance heavily
 
     # Technical analysis thresholds
