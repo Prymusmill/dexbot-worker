@@ -1,4 +1,4 @@
-# core/trade_executor.py - ENHANCED with PostgreSQL + CSV backup
+# core/trade_executor.py - ENHANCED with PostgreSQL + CSV backup + REALISTIC P&L
 import csv
 import os
 import logging
@@ -92,7 +92,7 @@ class EnhancedTradeExecutor:
 
     def _execute_market_based_trade(
             self, settings: Dict, market_data: Dict) -> TradeResult:
-        """Wykonaj transakcję opartą na rzeczywistych danych rynkowych"""
+        """FIXED: Execute trade with REALISTIC P&L simulation"""
         timestamp = datetime.utcnow().isoformat()
         input_token = "SOL"
         output_token = "USDC"
@@ -103,32 +103,76 @@ class EnhancedTradeExecutor:
         bid_price = market_data.get('bid', market_price)
         ask_price = market_data.get('ask', market_price)
         spread = market_data.get('spread', 0.001)
-
-        # Oblicz realistic price impact na podstawie spreadu i volatility
+        rsi = market_data.get('rsi', 50)
         volatility = market_data.get('volatility', 0.01)
+
+        # FIXED: REALISTIC PRICE IMPACT based on market conditions
         base_impact = spread / market_price
-        volatility_impact = random.uniform(-volatility, volatility) * 0.1
 
-        price_impact = base_impact + volatility_impact
+        # Market condition impacts
+        if rsi > 80:  # Overbought - worse execution
+            market_condition_impact = random.uniform(0.0005, 0.002)
+        elif rsi < 20:  # Oversold - better execution  
+            market_condition_impact = random.uniform(-0.001, 0.0005)
+        else:  # Normal conditions
+            market_condition_impact = random.uniform(-0.0005, 0.001)
 
-        # Symuluj wykonanie zlecenia
-        execution_price = ask_price * (1 + price_impact)
-        amount_out = amount_in / execution_price
+        # Volatility impact (higher vol = worse execution)
+        volatility_impact = volatility * random.uniform(0.1, 0.5)
 
-        # Faktyczny P&L uwzględniając spread
-        amount_out_usd = amount_out * bid_price
-        profitable = amount_out_usd > amount_in
+        # Random execution noise
+        noise_impact = random.uniform(-0.0003, 0.0003)
+
+        # TOTAL REALISTIC PRICE IMPACT
+        price_impact = base_impact + market_condition_impact + volatility_impact + noise_impact
+
+        # FIXED: Realistic execution with actual profit/loss variation
+        if random.random() < 0.4:  # 40% chance of buying at ask (worse price)
+            execution_price = ask_price * (1 + abs(price_impact))
+            amount_out = amount_in / execution_price
+            # When selling back, get bid price minus spread
+            final_usd_value = amount_out * bid_price * (1 - abs(price_impact) * 0.5)
+        else:  # 60% chance of better execution
+            execution_price = market_price * (1 + price_impact)
+            amount_out = amount_in / execution_price
+            # Better sell execution
+            final_usd_value = amount_out * market_price * (1 + price_impact * 0.3)
+
+        # Ensure some realistic variation
+        final_usd_value *= random.uniform(0.9985, 1.0025)  # ±0.15% to ±0.25% variation
+
+        # ENHANCED: Add trading fees simulation
+        trading_fees = amount_in * 0.001  # 0.1% fees
+        net_amount_out = final_usd_value - trading_fees
+
+        # Calculate profitability
+        profitable = net_amount_out > amount_in
+
+        # Add some market-based profitability bias
+        if rsi < 25:  # Very oversold - higher chance of profit
+            if random.random() < 0.7:  # 70% chance to be profitable
+                net_amount_out = amount_in * random.uniform(1.0005, 1.002)
+                profitable = True
+        elif rsi > 75:  # Very overbought - higher chance of loss
+            if random.random() < 0.7:  # 70% chance to be unprofitable
+                net_amount_out = amount_in * random.uniform(0.998, 0.9995)
+                profitable = False
 
         # Informacje o strategii
-        signal_strength = random.uniform(0.1, 0.9)
-        strategy_used = "market_based_v1"
+        strategy_used = "enhanced_realistic_simulation_v2"
+
+        # Signal strength based on market conditions
+        if rsi < 30 or rsi > 70:
+            signal_strength = random.uniform(0.6, 0.9)
+        else:
+            signal_strength = random.uniform(0.3, 0.7)
 
         trade_result = TradeResult(
             timestamp=timestamp,
             input_token=input_token,
             output_token=output_token,
             amount_in=amount_in,
-            amount_out=amount_out_usd,
+            amount_out=net_amount_out,
             price_impact=price_impact,
             market_price=market_price,
             spread=spread,
@@ -140,22 +184,32 @@ class EnhancedTradeExecutor:
         # ENHANCED: Zapisz do PostgreSQL + CSV
         self._save_trade_data(trade_result, market_data)
 
-        print(f"✅ Market Trade: {trade_result.input_token}→{trade_result.output_token}, "
-              f"${trade_result.amount_in:.4f}→${trade_result.amount_out:.4f}, "
-              f"Price: ${market_price:.4f}, Impact: {price_impact:.4f}")
+        # ENHANCED LOGGING with realistic profit/loss details
+        pnl = net_amount_out - amount_in
+        pnl_pct = (pnl / amount_in) * 100
+        profit_status = "✅ PROFIT" if profitable else "❌ LOSS"
+
+        print(f"{profit_status} Market Trade: {input_token}→{output_token}")
+        print(f"   💰 ${amount_in:.4f} → ${net_amount_out:.4f} (P&L: {pnl:+.4f} / {pnl_pct:+.2f}%)")
+        print(f"   📊 Price: ${market_price:.4f}, Impact: {price_impact:.4f}, RSI: {rsi:.1f}")
 
         return trade_result
 
     def _simulate_trade(self, settings: Dict) -> TradeResult:
-        """Fallback symulacja gdy brak danych rynkowych"""
+        """FIXED: Fallback simulation with realistic variation"""
         timestamp = datetime.utcnow().isoformat()
         input_token = "SOL"
         output_token = "USDC"
         amount_in = settings["trade_amount_usd"]
 
-        # Podstawowa symulacja
-        price_impact = round(random.uniform(-0.01, 0.01), 5)
-        amount_out = round(amount_in * (1 + price_impact), 5)
+        # IMPROVED: More realistic simulation
+        price_impact = round(random.uniform(-0.005, 0.005), 5)  # ±0.5% range
+        amount_out = amount_in * (1 + price_impact)
+        
+        # Add trading fees
+        trading_fees = amount_in * 0.001
+        amount_out -= trading_fees
+        
         profitable = amount_out > amount_in
 
         trade_result = TradeResult(
@@ -165,19 +219,22 @@ class EnhancedTradeExecutor:
             amount_in=amount_in,
             amount_out=amount_out,
             price_impact=price_impact,
-            market_price=0.0,
-            spread=0.0,
+            market_price=100.0,  # Default price
+            spread=0.001,
             signal_strength=0.5,
-            strategy_used="simulation_fallback",
+            strategy_used="simulation_fallback_v2",
             profitable=profitable
         )
 
         # ENHANCED: Zapisz do PostgreSQL + CSV
         self._save_trade_data(trade_result)
 
-        print(f"✅ Simulation: {trade_result.input_token}→{trade_result.output_token}, "
-              f"${trade_result.amount_in:.4f}→${trade_result.amount_out:.4f}, "
-              f"Impact: {price_impact:.4f}")
+        pnl = amount_out - amount_in
+        pnl_pct = (pnl / amount_in) * 100
+        profit_status = "✅ PROFIT" if profitable else "❌ LOSS"
+
+        print(f"{profit_status} Simulation: {trade_result.input_token}→{trade_result.output_token}")
+        print(f"   💰 ${amount_in:.4f} → ${amount_out:.4f} (P&L: {pnl:+.4f} / {pnl_pct:+.2f}%)")
 
         return trade_result
 

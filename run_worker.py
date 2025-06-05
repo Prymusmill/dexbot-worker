@@ -1,4 +1,4 @@
-# run_worker.py - COMPLETE ENHANCED MULTI-ASSET TRADING BOT
+# run_worker.py - COMPLETE ENHANCED MULTI-ASSET TRADING BOT (FIXED)
 import os
 import sys
 import time
@@ -102,10 +102,10 @@ class EnhancedTradingBot:
         self.last_ml_training = None
         self.training_in_progress = False
         
-        # Contrarian trading
+        # FIXED: Conservative contrarian trading
         self.contrarian_trade_count = 0
         self.contrarian_wins = 0
-        self.contrarian_threshold = 0.3
+        self.contrarian_threshold = settings.get("contrarian_threshold", 0.75)  # FIXED: More conservative
         
         # GPT integration
         self.gpt_analyzer = None
@@ -449,15 +449,15 @@ class EnhancedTradingBot:
             self.training_in_progress = False
     
     def _calculate_contrarian_score(self, market_data: Dict) -> float:
-        """Calculate contrarian trading opportunity score"""
+        """FIXED: Ultra-conservative contrarian scoring - only extreme conditions"""
         if not self.ml_predictions:
             return 0.0
         
         ml_direction = self.ml_predictions.get('direction', 'neutral')
         ml_confidence = self.ml_predictions.get('confidence', 0)
         
-        # Only consider contrarian if ML predicts unprofitable with high confidence
-        if ml_direction != 'unprofitable' or ml_confidence < 0.8:
+        # FIXED: Require VERY high ML confidence (95%+) for contrarian consideration
+        if ml_direction != 'unprofitable' or ml_confidence < 0.95:
             return 0.0
         
         score = 0.0
@@ -465,83 +465,137 @@ class EnhancedTradingBot:
         price_change_24h = market_data.get('price_change_24h', 0)
         volatility = market_data.get('volatility', 0.01)
         
-        # RSI extremes (strongest contrarian signal)
-        if rsi >= 95:
-            score += 0.5
-        elif rsi <= 5:
-            score += 0.5
-        elif rsi >= 85:
+        # FIXED: Only EXTREME RSI conditions
+        if rsi >= 99:  # EXTREME overbought
+            score += 0.4
+        elif rsi <= 1:  # EXTREME oversold
+            score += 0.4
+        elif rsi >= 97:  # Near extreme overbought
             score += 0.3
-        elif rsi <= 15:
+        elif rsi <= 3:  # Near extreme oversold
             score += 0.3
-        elif rsi >= 75:
-            score += 0.1
-        elif rsi <= 25:
-            score += 0.1
+        elif rsi >= 95:  # Very overbought
+            score += 0.2
+        elif rsi <= 5:  # Very oversold
+            score += 0.2
+        else:
+            return 0.0  # No contrarian trading unless extreme RSI
         
-        # Price momentum extremes
-        if abs(price_change_24h) >= 15:
+        # FIXED: Only extreme price movements
+        if abs(price_change_24h) >= 30:  # EXTREME momentum
             score += 0.3
-        elif abs(price_change_24h) >= 10:
+        elif abs(price_change_24h) >= 25:  # Very high momentum
             score += 0.2
-        elif abs(price_change_24h) >= 5:
+        elif abs(price_change_24h) >= 20:  # High momentum
             score += 0.1
         
-        # High volatility bonus
-        if volatility > 0.1:
+        # FIXED: Very high volatility requirement
+        if volatility > 0.25:  # Extreme volatility
             score += 0.2
-        elif volatility > 0.05:
+        elif volatility > 0.2:  # Very high volatility
+            score += 0.15
+        elif volatility > 0.15:  # High volatility
             score += 0.1
         
-        # ML confidence bonus
-        if ml_confidence >= 0.95:
-            score += 0.2
-        elif ml_confidence >= 0.9:
+        # ML confidence bonus (only for extreme confidence)
+        if ml_confidence >= 0.98:
             score += 0.1
+        elif ml_confidence >= 0.97:
+            score += 0.05
         
-        return min(score, 1.0)  # Cap at 1.0
+        # FIXED: Risk safety check - too many extreme conditions = too risky
+        extreme_conditions = 0
+        if rsi >= 99 or rsi <= 1:
+            extreme_conditions += 2  # Double weight for extreme RSI
+        elif rsi >= 97 or rsi <= 3:
+            extreme_conditions += 1
+        
+        if abs(price_change_24h) >= 30:
+            extreme_conditions += 2  # Double weight for extreme momentum
+        elif abs(price_change_24h) >= 25:
+            extreme_conditions += 1
+        
+        if volatility > 0.25:
+            extreme_conditions += 1
+        
+        # If too many extreme conditions, reduce score (too risky)
+        if extreme_conditions >= 4:
+            score *= 0.5  # Very high risk
+        elif extreme_conditions >= 3:
+            score *= 0.7  # High risk
+        
+        # FIXED: Never exceed threshold easily - require perfect storm
+        return min(score, 0.9)  # Cap below 1.0
     
     def should_execute_trade(self) -> Tuple[bool, str]:
-        """Enhanced trading decision with contrarian logic"""
+        """FIXED: Enhanced trading decision with conservative contrarian logic"""
         if not self.latest_market_data:
-            return True, "fallback"
+            return True, "fallback_no_data"
         
-        # Contrarian trading check (highest priority)
+        # FIXED: Conservative contrarian trading check (highest priority)
         if self.ml_predictions:
             ml_direction = self.ml_predictions.get('direction', 'neutral')
             ml_confidence = self.ml_predictions.get('confidence', 0)
             
-            if ml_direction == 'unprofitable' and ml_confidence > 0.8:
+            # Only consider contrarian with ultra-high ML confidence
+            if ml_direction == 'unprofitable' and ml_confidence >= 0.95:
                 contrarian_score = self._calculate_contrarian_score(self.latest_market_data)
                 
-                if contrarian_score >= 0.6:
-                    print(f"🔄 CONTRARIAN TRADE: Score {contrarian_score:.2f}")
-                    return True, "contrarian_strong"
-                elif contrarian_score >= self.contrarian_threshold:
-                    if random.random() < contrarian_score * 1.5:
-                        print(f"🎲 CONTRARIAN GAMBLE: Score {contrarian_score:.2f}")
-                        return True, "contrarian_gamble"
+                # FIXED: Very high threshold for contrarian trades
+                if contrarian_score >= 0.85:  # Ultra-strong contrarian signal
+                    print(f"🔄 ULTRA-STRONG CONTRARIAN: Score {contrarian_score:.2f}")
+                    return True, "contrarian_ultra_strong"
+                elif contrarian_score >= self.contrarian_threshold:  # Strong contrarian
+                    # Additional randomness to make it even more rare
+                    if random.random() < 0.3:  # Only 30% chance even with good score
+                        print(f"🎲 CONTRARIAN RARE: Score {contrarian_score:.2f}")
+                        return True, "contrarian_rare"
+                    else:
+                        print(f"🚫 Contrarian score good ({contrarian_score:.2f}) but failed random check")
             
-            # Standard ML skip logic
-            if ml_direction == 'unprofitable' and ml_confidence > 0.8:
+            # FIXED: Enhanced ML skip logic
+            if ml_direction == 'unprofitable' and ml_confidence > 0.85:
                 rsi = self.latest_market_data.get('rsi', 50)
-                if not (rsi > 90 or rsi < 10):  # Unless extreme RSI
-                    return False, "ml_skip"
+                # Only override ML if EXTREME RSI
+                if not (rsi > 95 or rsi < 5):
+                    return False, "ml_skip_high_confidence"
+            elif ml_direction == 'unprofitable' and ml_confidence > 0.75:
+                # Regular ML skip for medium confidence
+                return False, "ml_skip_medium_confidence"
         
-        # Standard trading logic
+        # Standard ML-guided trading logic
         confidence = self.current_confidence
         ml_threshold = settings.get("ml_confidence_threshold", 0.75)
         
-        # Adjust for volatility
+        # Adjust for market conditions
         if self.market_volatility > settings.get("market_volatility_threshold", 0.05):
             confidence *= 0.8
+            if confidence < 0.4:
+                return False, "high_volatility_skip"
         
-        if confidence > 0.7:
+        # Trading decisions based on confidence
+        if confidence > 0.85:
+            return True, "very_high_confidence"
+        elif confidence > 0.75:
             return True, "high_confidence"
         elif confidence > ml_threshold:
-            return random.random() < confidence, "probability_based"
+            # Probability-based execution
+            if random.random() < confidence:
+                return True, "probability_based"
+            else:
+                return False, "probability_failed"
+        elif confidence > 0.5:
+            # Low confidence - reduced probability
+            if random.random() < 0.3:
+                return True, "low_confidence_chance"
+            else:
+                return False, "low_confidence_skip"
         else:
-            return random.random() < 0.5, "random_fallback"
+            # Very low confidence - very rare execution
+            if random.random() < 0.1:
+                return True, "very_low_confidence_rare"
+            else:
+                return False, "very_low_confidence_skip"
     
     def select_optimal_trading_asset(self) -> str:
         """Select optimal asset for trading based on signals and allocation"""
@@ -606,7 +660,7 @@ class EnhancedTradingBot:
             return self.current_asset
     
     def execute_trading_cycle(self) -> Dict[str, Any]:
-        """Execute enhanced trading cycle with comprehensive tracking"""
+        """FIXED: Enhanced trading cycle with ML integration and detailed tracking"""
         cycle_start = datetime.now()
         
         # Calculate adaptive parameters
@@ -619,13 +673,52 @@ class EnhancedTradingBot:
         print(f"   • ML Confidence: {self.current_confidence:.2f}")
         print(f"   • Market Volatility: {self.market_volatility:.4f}")
         
-        # Update ML predictions
+        # FIXED: Always try to update ML predictions
         if self.ml_integration and not self.training_in_progress:
-            self.update_ml_predictions()
+            print("🤖 Updating ML predictions for trading decisions...")
+            try:
+                self.update_ml_predictions()
+                
+                # Enhanced ML status logging
+                if self.ml_predictions:
+                    direction = self.ml_predictions.get('direction', 'unknown')
+                    confidence = self.ml_predictions.get('confidence', 0)
+                    recommendation = self.ml_predictions.get('recommendation', 'HOLD')
+                    model_count = self.ml_predictions.get('model_count', 0)
+                    model_agreement = self.ml_predictions.get('model_agreement', 0)
+                    
+                    print(f"   🎯 ML Prediction: {direction.upper()} (conf: {confidence:.2f}) → {recommendation}")
+                    print(f"   🤖 Models: {model_count}, Agreement: {model_agreement:.1%}")
+                    
+                    # Detailed ML guidance
+                    if direction == 'profitable' and confidence > 0.75:
+                        print(f"   ✅ Strong ML signal for trading!")
+                    elif direction == 'unprofitable' and confidence > 0.85:
+                        contrarian_score = self._calculate_contrarian_score(self.latest_market_data)
+                        if contrarian_score > self.contrarian_threshold:
+                            print(f"   🔄 Potential contrarian opportunity (score: {contrarian_score:.2f})")
+                        else:
+                            print(f"   ⏸️ ML suggests avoiding trades (contrarian score: {contrarian_score:.2f})")
+                    else:
+                        print(f"   ⚖️ ML guidance: moderate confidence")
+                else:
+                    print("   ⚠️ No ML predictions available - check training status")
+                    
+            except Exception as e:
+                print(f"   ❌ ML prediction update failed: {e}")
+        else:
+            if self.training_in_progress:
+                print("   🔄 ML training in progress - using last predictions")
+            else:
+                print("   ⚠️ ML integration not available")
         
         # Multi-asset: select optimal asset
         if self.multi_asset_service:
+            old_asset = self.current_asset
             self.select_optimal_trading_asset()
+            if old_asset != self.current_asset:
+                print(f"   🔄 Asset switched: {old_asset} → {self.current_asset}")
+                self.session_stats['asset_switches'] += 1
         
         # Cycle statistics
         cycle_stats = {
@@ -634,6 +727,7 @@ class EnhancedTradingBot:
             'contrarian_trades': 0,
             'contrarian_wins': 0,
             'skipped': 0,
+            'ml_guided': 0,
             'reasons': {}
         }
         
@@ -649,6 +743,11 @@ class EnhancedTradingBot:
                 if should_trade:
                     # Track reason
                     cycle_stats['reasons'][reason] = cycle_stats['reasons'].get(reason, 0) + 1
+                    
+                    # Track ML-guided trades
+                    if ('ml' in reason or 'confidence' in reason or 
+                        (self.ml_predictions and self.ml_predictions.get('confidence', 0) > 0.6)):
+                        cycle_stats['ml_guided'] += 1
                     
                     # Execute trade
                     trade_result = self.trade_executor.execute_trade(
@@ -677,31 +776,34 @@ class EnhancedTradingBot:
                                 cycle_stats['contrarian_wins'] += 1
                                 self.session_stats['contrarian_wins'] += 1
                                 self.contrarian_wins += 1
-                                print(f"🎯 CONTRARIAN WIN!")
+                                print(f"🎯 CONTRARIAN WIN! (Score paid off)")
                             else:
-                                print(f"💥 Contrarian loss")
+                                print(f"💥 Contrarian loss (expected for reversal trading)")
                             
                             self.contrarian_trade_count += 1
                         
                         self.state['count'] += 1
                         
-                        # Log significant trades
-                        if 'contrarian' in reason or trade_result.profitable:
+                        # Enhanced logging for significant trades
+                        pnl = trade_result.amount_out - trade_result.amount_in
+                        pnl_pct = (pnl / trade_result.amount_in) * 100
+                        
+                        if 'contrarian' in reason or abs(pnl_pct) > 0.1 or trade_result.profitable:
                             profit_status = "✅ PROFIT" if trade_result.profitable else "❌ LOSS"
-                            print(f"   {profit_status}: ${trade_result.amount_in:.4f} → ${trade_result.amount_out:.4f} ({reason})")
+                            print(f"   {profit_status}: P&L {pnl:+.6f} ({pnl_pct:+.2f}%) - {reason}")
                     
                 else:
                     cycle_stats['skipped'] += 1
                     cycle_stats['reasons'][reason] = cycle_stats['reasons'].get(reason, 0) + 1
-                    if i % 5 == 0:  # Log every 5th skip
+                    if i % 15 == 0:  # Log every 15th skip
                         print(f"   ⏸️ Skipped ({reason})")
                 
-                # Status check every 10 trades
-                if (i + 1) % 10 == 0:
+                # Status check every 15 trades
+                if (i + 1) % 15 == 0:
                     self._log_cycle_progress(i + 1, cycle_size, cycle_stats)
                 
                 # Small delay between trades
-                time.sleep(0.1)
+                time.sleep(0.05)  # Fast execution
                 
             except Exception as e:
                 print(f"❌ Trade execution error: {e}")
@@ -727,13 +829,50 @@ class EnhancedTradingBot:
             'asset': self.current_asset
         })
         
-        # Log cycle summary
-        self._log_cycle_summary(cycle_stats)
+        # Enhanced cycle summary logging
+        self._log_enhanced_cycle_summary(cycle_stats)
         
         return cycle_stats
     
+    def _log_enhanced_cycle_summary(self, cycle_stats: Dict):
+        """FIXED: Enhanced cycle summary with detailed ML and contrarian tracking"""
+        executed = cycle_stats['executed']
+        profitable = cycle_stats['profitable']
+        contrarian_trades = cycle_stats['contrarian_trades']
+        contrarian_wins = cycle_stats['contrarian_wins']
+        ml_guided = cycle_stats.get('ml_guided', 0)
+        win_rate = cycle_stats['win_rate']
+        duration = cycle_stats['duration_seconds']
+        
+        print(f"\n✅ CYCLE {cycle_stats['cycle_number']} COMPLETE ({self.current_asset})")
+        print(f"   📊 Executed: {executed}, Profitable: {profitable} ({win_rate:.1%})")
+        print(f"   🤖 ML-guided: {ml_guided}/{executed} ({ml_guided/max(1,executed):.1%})")
+        print(f"   ⏱️ Duration: {duration:.1f}s")
+        
+        if contrarian_trades > 0:
+            contrarian_win_rate = contrarian_wins / contrarian_trades
+            print(f"   🔄 Contrarian: {contrarian_trades} trades, {contrarian_wins} wins ({contrarian_win_rate:.1%})")
+        
+        # Enhanced trade reasons breakdown
+        if cycle_stats['reasons']:
+            print(f"   📋 Reasons: {dict(cycle_stats['reasons'])}")
+        
+        # Current ML status
+        if self.ml_predictions:
+            ml_conf = self.ml_predictions.get('confidence', 0)
+            ml_dir = self.ml_predictions.get('direction', 'unknown')
+            print(f"   🎯 Current ML: {ml_dir} ({ml_conf:.2f})")
+        
+        print(f"   📈 Recent win rate: {self.recent_win_rate:.1%}")
+        
+        # Performance trend analysis
+        if len(self.cycle_performance) >= 3:
+            trend_direction = "📈" if self.cycle_performance[-1] > self.cycle_performance[-3] else "📉"
+            recent_avg = sum(self.cycle_performance[-3:]) / 3
+            print(f"   {trend_direction} 3-cycle trend: {recent_avg:.1%}")
+    
     def _calculate_adaptive_parameters(self) -> Dict[str, float]:
-        """Calculate adaptive trading parameters"""
+        """Calculate adaptive trading parameters based on performance and conditions"""
         base_cycle_size = settings.get("trades_per_cycle", 50)
         base_delay = settings.get("cycle_delay_seconds", 30)
         
@@ -741,30 +880,32 @@ class EnhancedTradingBot:
         confidence_factor = 1.0
         if self.ml_predictions and settings.get("adaptive_trading", True):
             confidence = self.current_confidence
-            if confidence > 0.7:
+            if confidence > 0.75:
                 confidence_factor = settings.get("high_confidence_multiplier", 1.2)
-            elif confidence < 0.3:
+            elif confidence < 0.4:
                 confidence_factor = settings.get("low_confidence_multiplier", 0.8)
         
         # Performance factor
         performance_factor = 1.0
         if len(self.cycle_performance) >= 3:
             recent_avg = sum(self.cycle_performance[-3:]) / 3
-            if recent_avg > 0.6:
-                performance_factor = 1.1
-            elif recent_avg < 0.4:
-                performance_factor = 0.9
+            if recent_avg > 0.65:
+                performance_factor = 1.15  # Increase when performing well
+            elif recent_avg < 0.35:
+                performance_factor = 0.85  # Decrease when performing poorly
         
         # Volatility factor
         volatility_factor = 1.0
         if self.market_volatility > 0.05:
-            volatility_factor = 0.9
+            volatility_factor = 0.9  # Reduce in high volatility
+        elif self.market_volatility < 0.01:
+            volatility_factor = 1.1  # Increase in low volatility
         
         # Calculate final parameters
         final_factor = confidence_factor * performance_factor * volatility_factor
         
-        self.adaptive_cycle_size = max(20, min(80, int(base_cycle_size * final_factor)))
-        self.adaptive_delay = max(15, min(60, int(base_delay / final_factor)))
+        self.adaptive_cycle_size = max(25, min(75, int(base_cycle_size * final_factor)))
+        self.adaptive_delay = max(20, min(60, int(base_delay / final_factor)))
         
         return {
             'cycle_size': self.adaptive_cycle_size,
@@ -776,49 +917,34 @@ class EnhancedTradingBot:
         }
     
     def _log_cycle_progress(self, current: int, total: int, stats: Dict):
-        """Log cycle progress"""
+        """Log detailed cycle progress"""
         executed = stats['executed']
         profitable = stats['profitable']
+        ml_guided = stats.get('ml_guided', 0)
         win_rate = (profitable / executed) if executed > 0 else 0
         
         print(f"   📊 Progress: {current}/{total}, Executed: {executed}, "
-              f"Profitable: {profitable} ({win_rate:.1%})")
-    
-    def _log_cycle_summary(self, cycle_stats: Dict):
-        """Log comprehensive cycle summary"""
-        executed = cycle_stats['executed']
-        profitable = cycle_stats['profitable']
-        contrarian_trades = cycle_stats['contrarian_trades']
-        contrarian_wins = cycle_stats['contrarian_wins']
-        win_rate = cycle_stats['win_rate']
-        duration = cycle_stats['duration_seconds']
-        
-        print(f"\n✅ CYCLE {cycle_stats['cycle_number']} COMPLETE ({self.current_asset})")
-        print(f"   • Executed: {executed}, Profitable: {profitable} ({win_rate:.1%})")
-        print(f"   • Duration: {duration:.1f}s")
-        
-        if contrarian_trades > 0:
-            contrarian_win_rate = contrarian_wins / contrarian_trades
-            print(f"   • Contrarian: {contrarian_trades} trades, {contrarian_wins} wins ({contrarian_win_rate:.1%})")
-        
-        # Trade reasons breakdown
-        if cycle_stats['reasons']:
-            print(f"   • Reasons: {dict(cycle_stats['reasons'])}")
-        
-        print(f"   • Recent win rate: {self.recent_win_rate:.1%}")
+              f"Profitable: {profitable} ({win_rate:.1%}), ML-guided: {ml_guided}")
     
     def _log_session_summary(self):
-        """Log comprehensive session summary"""
+        """Log comprehensive session summary with enhanced metrics"""
         print(f"\n📊 SESSION SUMMARY:")
         print(f"   • Total trades: {self.session_stats['total_trades_executed']}")
         print(f"   • Profitable: {self.session_stats['profitable_trades']}")
-        print(f"   • Overall win rate: {self.session_stats['profitable_trades'] / max(1, self.session_stats['total_trades_executed']):.1%}")
+        total_win_rate = self.session_stats['profitable_trades'] / max(1, self.session_stats['total_trades_executed'])
+        print(f"   • Overall win rate: {total_win_rate:.1%}")
         print(f"   • Recent win rate: {self.recent_win_rate:.1%}")
         print(f"   • Cycles completed: {self.session_stats['cycles_completed']}")
         print(f"   • Contrarian trades: {self.session_stats['contrarian_trades']}")
+        
+        # Contrarian performance
+        if self.session_stats['contrarian_trades'] > 0:
+            contrarian_rate = self.session_stats['contrarian_wins'] / self.session_stats['contrarian_trades']
+            print(f"   • Contrarian win rate: {contrarian_rate:.1%}")
+        
         print(f"   • Asset switches: {self.session_stats['asset_switches']}")
         
-        # Portfolio allocation
+        # Portfolio allocation status
         total_trades = sum(self.trade_counts.values())
         if total_trades > 0:
             print(f"   • Portfolio allocation:")
@@ -830,18 +956,18 @@ class EnhancedTradingBot:
         
         # ML status
         if self.ml_integration:
-            print(f"   • ML predictions: {self.ml_prediction_count}")
+            print(f"   • ML predictions generated: {self.ml_prediction_count}")
             if self.last_ml_training:
                 print(f"   • Last ML training: {self.last_ml_training.strftime('%H:%M:%S')}")
         
-        print(f"   • Current asset: {self.current_asset}")
+        print(f"   • Current trading asset: {self.current_asset}")
         if self.latest_market_data:
             price = self.latest_market_data.get('price', 0)
             rsi = self.latest_market_data.get('rsi', 50)
             print(f"   • Current {self.current_asset} price: ${price:.4f}, RSI: {rsi:.1f}")
     
     def load_state(self):
-        """Load application state"""
+        """Load application state from file"""
         try:
             if os.path.exists(STATE_FILE):
                 with open(STATE_FILE, "r") as f:
@@ -857,12 +983,13 @@ class EnhancedTradingBot:
             self.state = {"count": 0, "session_start": datetime.now().isoformat()}
     
     def save_state(self) -> bool:
-        """Save application state"""
+        """Save application state to file"""
         try:
             os.makedirs("data", exist_ok=True)
             self.state['last_save'] = datetime.now().isoformat()
             self.state['session_stats'] = self.session_stats
             self.state['trade_counts'] = self.trade_counts
+            self.state['recent_win_rate'] = self.recent_win_rate
             
             with open(STATE_FILE, "w") as f:
                 json.dump(self.state, f, indent=2)
@@ -897,7 +1024,7 @@ class EnhancedTradingBot:
         
         # Wait for initial data
         print("⏳ Waiting for initial market data...")
-        time.sleep(5)
+        time.sleep(8)  # Longer wait for stable connection
         
         print(f"🎯 Ready to trade! Current asset: {self.current_asset}")
         

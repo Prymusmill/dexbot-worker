@@ -36,7 +36,7 @@ SETTINGS = {
 
     # ENHANCED: ML Configuration
     "ml_enabled": True,
-    "ml_confidence_threshold": 0.65,    # Lowered from 0.75 for more activity
+    "ml_confidence_threshold": 0.60,    # Lowered from 0.75 for more activity
     "ml_retrain_hours": 2.0,            # More frequent retraining
     "adaptive_trading": True,
     
@@ -49,20 +49,20 @@ SETTINGS = {
 
     # ENHANCED: Contrarian trading
     "contrarian_enabled": True,
-    "contrarian_threshold": 0.3,        # Minimum score to consider contrarian trade
-    "contrarian_max_percentage": 0.2,   # Max 20% of trades can be contrarian
-    "extreme_rsi_threshold": 90,        # RSI level for extreme conditions
+    "contrarian_threshold": 0.7,        # Minimum score to consider contrarian trade
+    "contrarian_max_percentage": 0.1,   # Max 20% of trades can be contrarian
+    "extreme_rsi_threshold": 95,        # RSI level for extreme conditions
     
     # RSI thresholds for contrarian analysis
     "rsi_extreme_overbought": 95,
     "rsi_extreme_oversold": 5,
-    "rsi_strong_overbought": 85,
-    "rsi_strong_oversold": 15,
+    "rsi_strong_overbought": 98,
+    "rsi_strong_oversold": 2,
 
     # ENHANCED: Adaptive trading controls
-    "high_confidence_multiplier": 1.2,  # Slightly reduced from 1.5
-    "low_confidence_multiplier": 0.7,   # More conservative
-    "market_volatility_threshold": 0.04, # More sensitive to volatility
+    "high_confidence_multiplier": 1.1,  # Slightly reduced from 1.5
+    "low_confidence_multiplier": 0.8,   # More conservative
+    "market_volatility_threshold": 0.03, # More sensitive to volatility
     
     # Performance-based adaptive parameters
     "performance_adjustment_window": 5,  # Look at last 5 cycles for performance
