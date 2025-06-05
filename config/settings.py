@@ -36,7 +36,7 @@ SETTINGS = {
 
     # ENHANCED: ML Configuration
     "ml_enabled": True,
-    "ml_confidence_threshold": 0.60,    # Lowered from 0.75 for more activity
+    "ml_confidence_threshold": 0.40,    # Lowered from 0.75 for more activity
     "ml_retrain_hours": 2.0,            # More frequent retraining
     "adaptive_trading": True,
     
@@ -62,7 +62,7 @@ SETTINGS = {
     # ENHANCED: Adaptive trading controls
     "high_confidence_multiplier": 1.1,  # Slightly reduced from 1.5
     "low_confidence_multiplier": 0.8,   # More conservative
-    "market_volatility_threshold": 0.03, # More sensitive to volatility
+    "market_volatility_threshold": 0.015, # More sensitive to volatility
     
     # Performance-based adaptive parameters
     "performance_adjustment_window": 5,  # Look at last 5 cycles for performance

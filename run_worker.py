@@ -1,4 +1,4 @@
-# run_worker.py - COMPLETE ENHANCED MULTI-ASSET TRADING BOT (FIXED)
+# run_worker.py - COMPLETE ENHANCED MULTI-ASSET TRADING BOT (BALANCED FIX)
 import os
 import sys
 import time
@@ -102,10 +102,10 @@ class EnhancedTradingBot:
         self.last_ml_training = None
         self.training_in_progress = False
         
-        # FIXED: Conservative contrarian trading
+        # FIXED: Balanced contrarian trading
         self.contrarian_trade_count = 0
         self.contrarian_wins = 0
-        self.contrarian_threshold = settings.get("contrarian_threshold", 0.75)  # FIXED: More conservative
+        self.contrarian_threshold = settings.get("contrarian_threshold", 0.85)  # FIXED: Ultra-conservative for safety
         
         # GPT integration
         self.gpt_analyzer = None
@@ -351,7 +351,7 @@ class EnhancedTradingBot:
                 ml_info = f", ML: {direction.upper()} ({confidence:.2f})"
                 
                 # Contrarian analysis
-                if direction == 'unprofitable' and confidence > 0.8:
+                if direction == 'unprofitable' and confidence > 0.9:
                     contrarian_score = self._calculate_contrarian_score(market_data)
                     if contrarian_score >= self.contrarian_threshold:
                         contrarian_info = f", CONTRARIAN: {contrarian_score:.2f}"
@@ -456,8 +456,8 @@ class EnhancedTradingBot:
         ml_direction = self.ml_predictions.get('direction', 'neutral')
         ml_confidence = self.ml_predictions.get('confidence', 0)
         
-        # FIXED: Require VERY high ML confidence (95%+) for contrarian consideration
-        if ml_direction != 'unprofitable' or ml_confidence < 0.95:
+        # FIXED: Require ULTRA HIGH ML confidence (98%+) for contrarian consideration
+        if ml_direction != 'unprofitable' or ml_confidence < 0.98:
             return 0.0
         
         score = 0.0
@@ -465,134 +465,178 @@ class EnhancedTradingBot:
         price_change_24h = market_data.get('price_change_24h', 0)
         volatility = market_data.get('volatility', 0.01)
         
-        # FIXED: Only EXTREME RSI conditions
-        if rsi >= 99:  # EXTREME overbought
+        # FIXED: Only EXTREME RSI conditions (99%+ or 1%-)
+        if rsi >= 99.5:  # EXTREME overbought
             score += 0.4
-        elif rsi <= 1:  # EXTREME oversold
+        elif rsi <= 0.5:  # EXTREME oversold
             score += 0.4
-        elif rsi >= 97:  # Near extreme overbought
+        elif rsi >= 99:  # Near extreme
             score += 0.3
-        elif rsi <= 3:  # Near extreme oversold
+        elif rsi <= 1:  # Near extreme
             score += 0.3
-        elif rsi >= 95:  # Very overbought
-            score += 0.2
-        elif rsi <= 5:  # Very oversold
-            score += 0.2
         else:
-            return 0.0  # No contrarian trading unless extreme RSI
+            return 0.0  # No contrarian trading unless EXTREME RSI
         
-        # FIXED: Only extreme price movements
-        if abs(price_change_24h) >= 30:  # EXTREME momentum
+        # FIXED: Only extreme price movements (25%+)
+        if abs(price_change_24h) >= 40:  # EXTREME momentum
             score += 0.3
-        elif abs(price_change_24h) >= 25:  # Very high momentum
+        elif abs(price_change_24h) >= 30:  # Very high momentum
             score += 0.2
-        elif abs(price_change_24h) >= 20:  # High momentum
-            score += 0.1
         
         # FIXED: Very high volatility requirement
-        if volatility > 0.25:  # Extreme volatility
+        if volatility > 0.3:  # Extreme volatility
             score += 0.2
-        elif volatility > 0.2:  # Very high volatility
+        elif volatility > 0.25:  # Very high volatility
             score += 0.15
-        elif volatility > 0.15:  # High volatility
-            score += 0.1
         
         # ML confidence bonus (only for extreme confidence)
-        if ml_confidence >= 0.98:
+        if ml_confidence >= 0.995:
             score += 0.1
-        elif ml_confidence >= 0.97:
+        elif ml_confidence >= 0.99:
             score += 0.05
         
-        # FIXED: Risk safety check - too many extreme conditions = too risky
+        # FIXED: Safety check - multiple extreme conditions = higher risk
         extreme_conditions = 0
-        if rsi >= 99 or rsi <= 1:
-            extreme_conditions += 2  # Double weight for extreme RSI
-        elif rsi >= 97 or rsi <= 3:
-            extreme_conditions += 1
-        
+        if rsi >= 99.5 or rsi <= 0.5:
+            extreme_conditions += 2
         if abs(price_change_24h) >= 30:
-            extreme_conditions += 2  # Double weight for extreme momentum
-        elif abs(price_change_24h) >= 25:
             extreme_conditions += 1
-        
         if volatility > 0.25:
             extreme_conditions += 1
         
-        # If too many extreme conditions, reduce score (too risky)
+        # If too many extreme conditions, it's too risky even for contrarian
         if extreme_conditions >= 4:
-            score *= 0.5  # Very high risk
+            score *= 0.3  # Very high risk reduction
         elif extreme_conditions >= 3:
-            score *= 0.7  # High risk
+            score *= 0.6  # High risk reduction
         
-        # FIXED: Never exceed threshold easily - require perfect storm
-        return min(score, 0.9)  # Cap below 1.0
+        return min(score, 0.9)  # Cap below threshold
     
     def should_execute_trade(self) -> Tuple[bool, str]:
-        """FIXED: Enhanced trading decision with conservative contrarian logic"""
+        """FIXED: BALANCED trading decision logic - not too aggressive, not too conservative"""
         if not self.latest_market_data:
             return True, "fallback_no_data"
         
-        # FIXED: Conservative contrarian trading check (highest priority)
+        # Get current market data for additional context
+        rsi = self.latest_market_data.get('rsi', 50)
+        volatility = self.market_volatility
+        price_change_24h = self.latest_market_data.get('price_change_24h', 0)
+        
+        # FIXED: Ultra-conservative contrarian trading check (highest priority)
         if self.ml_predictions:
             ml_direction = self.ml_predictions.get('direction', 'neutral')
             ml_confidence = self.ml_predictions.get('confidence', 0)
             
-            # Only consider contrarian with ultra-high ML confidence
-            if ml_direction == 'unprofitable' and ml_confidence >= 0.95:
+            # Only consider contrarian with ultra-high ML confidence and extreme conditions
+            if ml_direction == 'unprofitable' and ml_confidence >= 0.98:
                 contrarian_score = self._calculate_contrarian_score(self.latest_market_data)
                 
-                # FIXED: Very high threshold for contrarian trades
-                if contrarian_score >= 0.85:  # Ultra-strong contrarian signal
-                    print(f"🔄 ULTRA-STRONG CONTRARIAN: Score {contrarian_score:.2f}")
+                if contrarian_score >= 0.9:  # Ultra-strong contrarian signal
+                    print(f"🔄 ULTRA-STRONG CONTRARIAN: Score {contrarian_score:.2f} (ML: {ml_confidence:.3f})")
                     return True, "contrarian_ultra_strong"
                 elif contrarian_score >= self.contrarian_threshold:  # Strong contrarian
-                    # Additional randomness to make it even more rare
-                    if random.random() < 0.3:  # Only 30% chance even with good score
-                        print(f"🎲 CONTRARIAN RARE: Score {contrarian_score:.2f}")
-                        return True, "contrarian_rare"
-                    else:
-                        print(f"🚫 Contrarian score good ({contrarian_score:.2f}) but failed random check")
+                    # Additional extreme condition check
+                    if rsi >= 99 or rsi <= 1:  # Extreme RSI required
+                        if random.random() < 0.2:  # Only 20% chance even with good score
+                            print(f"🎲 CONTRARIAN EXTREME: Score {contrarian_score:.2f}, RSI {rsi:.1f}")
+                            return True, "contrarian_extreme_rare"
+                        else:
+                            print(f"🚫 Contrarian blocked by randomness (score: {contrarian_score:.2f})")
             
-            # FIXED: Enhanced ML skip logic
-            if ml_direction == 'unprofitable' and ml_confidence > 0.85:
-                rsi = self.latest_market_data.get('rsi', 50)
-                # Only override ML if EXTREME RSI
-                if not (rsi > 95 or rsi < 5):
-                    return False, "ml_skip_high_confidence"
-            elif ml_direction == 'unprofitable' and ml_confidence > 0.75:
-                # Regular ML skip for medium confidence
-                return False, "ml_skip_medium_confidence"
+            # FIXED: Balanced ML guidance - not too aggressive skipping
+            if ml_direction == 'unprofitable':
+                if ml_confidence >= 0.95:  # Very high confidence to skip
+                    # Only skip if NO extreme RSI conditions
+                    if not (rsi >= 95 or rsi <= 5):
+                        print(f"⏸️ ML SKIP: Very high confidence unprofitable ({ml_confidence:.2f})")
+                        return False, "ml_skip_very_high_confidence"
+                    else:
+                        print(f"🎯 ML Override: Extreme RSI ({rsi:.1f}) overrides ML ({ml_confidence:.2f})")
+                        return True, "extreme_rsi_override"
+                        
+                elif ml_confidence >= 0.9:  # High confidence - reduce probability
+                    if random.random() < 0.3:  # 30% chance to trade anyway
+                        print(f"🎲 ML Gamble: Trading despite ML ({ml_confidence:.2f})")
+                        return True, "ml_gamble_against_prediction"
+                    else:
+                        print(f"⏸️ ML Skip: High confidence unprofitable ({ml_confidence:.2f})")
+                        return False, "ml_skip_high_confidence"
+                        
+                elif ml_confidence >= 0.85:  # Medium-high confidence - 50% chance
+                    if random.random() < 0.5:
+                        print(f"⚖️ ML Neutral: 50/50 chance despite ML ({ml_confidence:.2f})")
+                        return True, "ml_neutral_chance"
+                    else:
+                        return False, "ml_skip_medium_high_confidence"
+                
+                # ML confidence 0.85 or lower - trade normally
         
-        # Standard ML-guided trading logic
-        confidence = self.current_confidence
-        ml_threshold = settings.get("ml_confidence_threshold", 0.75)
-        
-        # Adjust for market conditions
-        if self.market_volatility > settings.get("market_volatility_threshold", 0.05):
-            confidence *= 0.8
-            if confidence < 0.4:
+        # FIXED: Market condition checks
+        if volatility > 0.1:  # Very high volatility
+            if random.random() < 0.4:  # 40% chance in high volatility
+                print(f"⚠️ High volatility trading: {volatility:.4f}")
+                return True, "high_volatility_risk"
+            else:
                 return False, "high_volatility_skip"
         
-        # Trading decisions based on confidence
-        if confidence > 0.85:
+        # FIXED: Standard confidence-based trading
+        confidence = self.current_confidence
+        
+        # Adjust confidence based on market conditions
+        adjusted_confidence = confidence
+        
+        # RSI adjustments
+        if 30 <= rsi <= 70:  # Good RSI range
+            adjusted_confidence += 0.1
+        elif rsi >= 90 or rsi <= 10:  # Extreme RSI
+            adjusted_confidence += 0.15  # Boost for extreme conditions
+        elif rsi >= 80 or rsi <= 20:  # High RSI
+            adjusted_confidence += 0.05
+        
+        # Volatility adjustments
+        if 0.01 <= volatility <= 0.05:  # Good volatility range
+            adjusted_confidence += 0.05
+        elif volatility > 0.05:  # High volatility penalty
+            adjusted_confidence -= 0.1
+        
+        # Momentum adjustments
+        if 1 <= abs(price_change_24h) <= 5:  # Good momentum
+            adjusted_confidence += 0.05
+        elif abs(price_change_24h) > 10:  # High momentum
+            adjusted_confidence -= 0.05
+        
+        # Cap adjusted confidence
+        adjusted_confidence = max(0.1, min(0.95, adjusted_confidence))
+        
+        # FIXED: Trading decisions based on adjusted confidence
+        if adjusted_confidence >= 0.8:
+            print(f"🚀 Very High Confidence: {adjusted_confidence:.2f}")
             return True, "very_high_confidence"
-        elif confidence > 0.75:
+        elif adjusted_confidence >= 0.7:
+            print(f"📈 High Confidence: {adjusted_confidence:.2f}")
             return True, "high_confidence"
-        elif confidence > ml_threshold:
+        elif adjusted_confidence >= 0.6:
+            print(f"⚖️ Good Confidence: {adjusted_confidence:.2f}")
+            return True, "good_confidence"
+        elif adjusted_confidence >= 0.5:
             # Probability-based execution
-            if random.random() < confidence:
+            chance = adjusted_confidence * 1.2  # Boost chance slightly
+            if random.random() < chance:
+                print(f"🎲 Probability Trade: {adjusted_confidence:.2f} (rolled {chance:.2f})")
                 return True, "probability_based"
             else:
                 return False, "probability_failed"
-        elif confidence > 0.5:
-            # Low confidence - reduced probability
-            if random.random() < 0.3:
+        elif adjusted_confidence >= 0.4:
+            # Lower confidence - reduced chance
+            if random.random() < 0.4:
+                print(f"🎯 Low Confidence Chance: {adjusted_confidence:.2f}")
                 return True, "low_confidence_chance"
             else:
                 return False, "low_confidence_skip"
         else:
-            # Very low confidence - very rare execution
-            if random.random() < 0.1:
+            # Very low confidence - minimal chance
+            if random.random() < 0.15:
+                print(f"💫 Very Low Confidence Rare: {adjusted_confidence:.2f}")
                 return True, "very_low_confidence_rare"
             else:
                 return False, "very_low_confidence_skip"
@@ -660,7 +704,7 @@ class EnhancedTradingBot:
             return self.current_asset
     
     def execute_trading_cycle(self) -> Dict[str, Any]:
-        """FIXED: Enhanced trading cycle with ML integration and detailed tracking"""
+        """FIXED: Enhanced trading cycle with improved ML integration and detailed tracking"""
         cycle_start = datetime.now()
         
         # Calculate adaptive parameters
@@ -673,7 +717,7 @@ class EnhancedTradingBot:
         print(f"   • ML Confidence: {self.current_confidence:.2f}")
         print(f"   • Market Volatility: {self.market_volatility:.4f}")
         
-        # FIXED: Always try to update ML predictions
+        # Update ML predictions
         if self.ml_integration and not self.training_in_progress:
             print("🤖 Updating ML predictions for trading decisions...")
             try:
@@ -690,17 +734,19 @@ class EnhancedTradingBot:
                     print(f"   🎯 ML Prediction: {direction.upper()} (conf: {confidence:.2f}) → {recommendation}")
                     print(f"   🤖 Models: {model_count}, Agreement: {model_agreement:.1%}")
                     
-                    # Detailed ML guidance
-                    if direction == 'profitable' and confidence > 0.75:
-                        print(f"   ✅ Strong ML signal for trading!")
-                    elif direction == 'unprofitable' and confidence > 0.85:
+                    # FIXED: Balanced ML guidance interpretation
+                    if direction == 'profitable' and confidence > 0.7:
+                        print(f"   ✅ ML supports trading with confidence {confidence:.2f}")
+                    elif direction == 'unprofitable' and confidence > 0.95:
                         contrarian_score = self._calculate_contrarian_score(self.latest_market_data)
-                        if contrarian_score > self.contrarian_threshold:
-                            print(f"   🔄 Potential contrarian opportunity (score: {contrarian_score:.2f})")
+                        if contrarian_score > 0.5:
+                            print(f"   🔄 Strong contrarian opportunity (score: {contrarian_score:.2f})")
                         else:
-                            print(f"   ⏸️ ML suggests avoiding trades (contrarian score: {contrarian_score:.2f})")
+                            print(f"   ⏸️ ML strongly suggests caution (conf: {confidence:.2f})")
+                    elif direction == 'unprofitable' and confidence > 0.85:
+                        print(f"   ⚠️ ML suggests reduced trading (conf: {confidence:.2f})")
                     else:
-                        print(f"   ⚖️ ML guidance: moderate confidence")
+                        print(f"   ⚖️ ML guidance: moderate - trading decisions balanced")
                 else:
                     print("   ⚠️ No ML predictions available - check training status")
                     
@@ -718,7 +764,6 @@ class EnhancedTradingBot:
             self.select_optimal_trading_asset()
             if old_asset != self.current_asset:
                 print(f"   🔄 Asset switched: {old_asset} → {self.current_asset}")
-                self.session_stats['asset_switches'] += 1
         
         # Cycle statistics
         cycle_stats = {
@@ -728,6 +773,7 @@ class EnhancedTradingBot:
             'contrarian_wins': 0,
             'skipped': 0,
             'ml_guided': 0,
+            'ml_overridden': 0,
             'reasons': {}
         }
         
@@ -735,7 +781,10 @@ class EnhancedTradingBot:
         for i in range(cycle_size):
             try:
                 trade_number = self.state['count'] + 1
-                print(f"🔹 Trade {trade_number} (#{i + 1}/{cycle_size})")
+                
+                # Log every 10th trade progress
+                if i % 10 == 0:
+                    print(f"🔹 Trade {trade_number} (#{i + 1}/{cycle_size})")
                 
                 # Trading decision
                 should_trade, reason = self.should_execute_trade()
@@ -744,10 +793,11 @@ class EnhancedTradingBot:
                     # Track reason
                     cycle_stats['reasons'][reason] = cycle_stats['reasons'].get(reason, 0) + 1
                     
-                    # Track ML-guided trades
-                    if ('ml' in reason or 'confidence' in reason or 
-                        (self.ml_predictions and self.ml_predictions.get('confidence', 0) > 0.6)):
+                    # Track ML interaction
+                    if ('ml' in reason or 'confidence' in reason):
                         cycle_stats['ml_guided'] += 1
+                    elif ('override' in reason or 'gamble' in reason):
+                        cycle_stats['ml_overridden'] += 1
                     
                     # Execute trade
                     trade_result = self.trade_executor.execute_trade(
@@ -776,9 +826,9 @@ class EnhancedTradingBot:
                                 cycle_stats['contrarian_wins'] += 1
                                 self.session_stats['contrarian_wins'] += 1
                                 self.contrarian_wins += 1
-                                print(f"🎯 CONTRARIAN WIN! (Score paid off)")
+                                print(f"   🎯 CONTRARIAN WIN! (Extreme conditions paid off)")
                             else:
-                                print(f"💥 Contrarian loss (expected for reversal trading)")
+                                print(f"   💥 Contrarian loss (expected for reversal trading)")
                             
                             self.contrarian_trade_count += 1
                         
@@ -788,22 +838,26 @@ class EnhancedTradingBot:
                         pnl = trade_result.amount_out - trade_result.amount_in
                         pnl_pct = (pnl / trade_result.amount_in) * 100
                         
-                        if 'contrarian' in reason or abs(pnl_pct) > 0.1 or trade_result.profitable:
+                        # Log important trades
+                        if ('contrarian' in reason or 'override' in reason or 
+                            'gamble' in reason or abs(pnl_pct) > 0.1):
                             profit_status = "✅ PROFIT" if trade_result.profitable else "❌ LOSS"
                             print(f"   {profit_status}: P&L {pnl:+.6f} ({pnl_pct:+.2f}%) - {reason}")
                     
                 else:
                     cycle_stats['skipped'] += 1
                     cycle_stats['reasons'][reason] = cycle_stats['reasons'].get(reason, 0) + 1
-                    if i % 15 == 0:  # Log every 15th skip
-                        print(f"   ⏸️ Skipped ({reason})")
+                    
+                    # Log skip reasons periodically
+                    if i % 20 == 0 and i > 0:  # Every 20th skip
+                        print(f"   ⏸️ Recent skips: {reason}")
                 
-                # Status check every 15 trades
+                # Progress check every 15 trades
                 if (i + 1) % 15 == 0:
                     self._log_cycle_progress(i + 1, cycle_size, cycle_stats)
                 
                 # Small delay between trades
-                time.sleep(0.05)  # Fast execution
+                time.sleep(0.02)  # Very fast execution
                 
             except Exception as e:
                 print(f"❌ Trade execution error: {e}")
@@ -841,27 +895,44 @@ class EnhancedTradingBot:
         contrarian_trades = cycle_stats['contrarian_trades']
         contrarian_wins = cycle_stats['contrarian_wins']
         ml_guided = cycle_stats.get('ml_guided', 0)
+        ml_overridden = cycle_stats.get('ml_overridden', 0)
         win_rate = cycle_stats['win_rate']
         duration = cycle_stats['duration_seconds']
         
         print(f"\n✅ CYCLE {cycle_stats['cycle_number']} COMPLETE ({self.current_asset})")
         print(f"   📊 Executed: {executed}, Profitable: {profitable} ({win_rate:.1%})")
-        print(f"   🤖 ML-guided: {ml_guided}/{executed} ({ml_guided/max(1,executed):.1%})")
+        print(f"   🤖 ML-guided: {ml_guided}, ML-overridden: {ml_overridden}")
         print(f"   ⏱️ Duration: {duration:.1f}s")
         
         if contrarian_trades > 0:
             contrarian_win_rate = contrarian_wins / contrarian_trades
             print(f"   🔄 Contrarian: {contrarian_trades} trades, {contrarian_wins} wins ({contrarian_win_rate:.1%})")
         
-        # Enhanced trade reasons breakdown
+        # Enhanced trade reasons breakdown with explanations
         if cycle_stats['reasons']:
-            print(f"   📋 Reasons: {dict(cycle_stats['reasons'])}")
+            reasons = cycle_stats['reasons']
+            print(f"   📋 Trading Reasons:")
+            for reason, count in reasons.items():
+                if count > 0:
+                    if 'skip' in reason:
+                        print(f"     ⏸️ {reason}: {count}")
+                    elif 'contrarian' in reason:
+                        print(f"     🔄 {reason}: {count}")
+                    elif 'confidence' in reason:
+                        print(f"     📈 {reason}: {count}")
+                    else:
+                        print(f"     🎯 {reason}: {count}")
         
-        # Current ML status
+        # Current ML status and market conditions
         if self.ml_predictions:
             ml_conf = self.ml_predictions.get('confidence', 0)
             ml_dir = self.ml_predictions.get('direction', 'unknown')
             print(f"   🎯 Current ML: {ml_dir} ({ml_conf:.2f})")
+        
+        if self.latest_market_data:
+            rsi = self.latest_market_data.get('rsi', 50)
+            vol = self.market_volatility
+            print(f"   📊 Market: RSI {rsi:.1f}, Vol {vol:.4f}")
         
         print(f"   📈 Recent win rate: {self.recent_win_rate:.1%}")
         
@@ -904,7 +975,7 @@ class EnhancedTradingBot:
         # Calculate final parameters
         final_factor = confidence_factor * performance_factor * volatility_factor
         
-        self.adaptive_cycle_size = max(25, min(75, int(base_cycle_size * final_factor)))
+        self.adaptive_cycle_size = max(30, min(70, int(base_cycle_size * final_factor)))
         self.adaptive_delay = max(20, min(60, int(base_delay / final_factor)))
         
         return {
@@ -921,10 +992,11 @@ class EnhancedTradingBot:
         executed = stats['executed']
         profitable = stats['profitable']
         ml_guided = stats.get('ml_guided', 0)
+        ml_overridden = stats.get('ml_overridden', 0)
         win_rate = (profitable / executed) if executed > 0 else 0
         
         print(f"   📊 Progress: {current}/{total}, Executed: {executed}, "
-              f"Profitable: {profitable} ({win_rate:.1%}), ML-guided: {ml_guided}")
+              f"Profitable: {profitable} ({win_rate:.1%}), ML-guided: {ml_guided}, Overridden: {ml_overridden}")
     
     def _log_session_summary(self):
         """Log comprehensive session summary with enhanced metrics"""
