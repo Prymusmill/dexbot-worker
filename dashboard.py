@@ -849,7 +849,8 @@ def main():
                     
                     # Add direction emojis
                     if 'direction' in recent_trades.columns:
-                        direction_map = {'long': '🟢 LONG', 'short': '🔴 SHORT', 'hold': '⚪ HOLD'}
+                        direction_map = {'long': '🟢', 'short': '🔴', 'hold': '⚪'}
+                        'Direction': [f"{d.upper()} {direction_map.get(d, '❓')}" for d in direction_counts.index],
                         recent_trades['direction'] = recent_trades['direction'].map(direction_map)
                     
                     # Format duration
