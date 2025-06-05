@@ -849,8 +849,7 @@ def main():
                     
                     # Add direction emojis
                     if 'direction' in recent_trades.columns:
-                        direction_map = {'long': '🟢', 'short': '🔴', 'hold': '⚪'}
-                        'Direction': [f"{d.upper()} {direction_map.get(d, '❓')}" for d in direction_counts.index],
+                        'Direction': [f"{d.upper()} {'🟢' if d == 'long' else '🔴' if d == 'short' else '⚪'}" for d in direction_counts.index],
                         recent_trades['direction'] = recent_trades['direction'].map(direction_map)
                     
                     # Format duration
@@ -947,7 +946,12 @@ def main():
             
             perf_data = []
             for direction, perf in directional_perf.items():
-                emoji = {'long': '🟢', 'short': '🔴', 'hold': '⚪'}[direction]
+                emoji_map = {'long': '🟢', 'short': '🔴', 'hold': '⚪'}
+                direction_data = pd.DataFrame({
+                    'Direction': [f"{d.upper()} {emoji_map.get(d, '❔')}" for d in direction_counts.index],
+                    'Count': direction_counts.values
+                })
+                'Direction': [f"{d.upper()} {emoji_map.get(d, '❔')}" for d in direction_counts.index],
                 perf_data.append({
                     'Direction': f"{emoji} {direction.upper()}",
                     'Total Trades': perf.get('trades', 0),
