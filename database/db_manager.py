@@ -1,65 +1,43 @@
-# database/db_manager.py - PostgreSQL Integration for DexBot (PRODUCTION FIXED)
+# database/db_manager.py - EMERGENCY FIX: Disable SQLAlchemy, Use psycopg2 only
 import os
 import psycopg2
 import psycopg2.extras
 import pandas as pd
-import numpy as np  # ADDED: for numpy type conversion
+import numpy as np
 from datetime import datetime
 from typing import Dict, List, Optional
 import logging
 
-# SQLAlchemy imports
-try:
-    import sqlalchemy
-    from sqlalchemy import create_engine
-    SQLALCHEMY_AVAILABLE = True
-    print("✅ SQLAlchemy available for enhanced ML pipeline")
-except ImportError:
-    SQLALCHEMY_AVAILABLE = False
-    print("⚠️ SQLAlchemy not available - using psycopg2 only")
-
+# EMERGENCY: Disable SQLAlchemy completely for now
+SQLALCHEMY_AVAILABLE = False
+print("⚠️ SQLAlchemy disabled for emergency fix - using psycopg2 only")
 
 class DatabaseManager:
     """
-    PostgreSQL database manager with enhanced ML pipeline support
+    PostgreSQL database manager - EMERGENCY VERSION (psycopg2 only)
     """
 
     def __init__(self):
         self.connection = None
         self.database_url = os.getenv('DATABASE_URL')
         self.logger = logging.getLogger(__name__)
-        self.sqlalchemy_engine = None
+        self.sqlalchemy_engine = None  # Disabled
 
         if not self.database_url:
             raise ValueError("DATABASE_URL environment variable not found")
 
         self._connect()
         self._create_tables()
-        
-        # Initialize SQLAlchemy engine for better pandas support
-        if SQLALCHEMY_AVAILABLE:
-            self._init_sqlalchemy_engine()
 
     def _connect(self):
         """Establish database connection"""
         try:
             self.connection = psycopg2.connect(self.database_url)
             self.connection.autocommit = True
-            print("✅ Connected to PostgreSQL database")
+            print("✅ Connected to PostgreSQL database (psycopg2 only)")
         except Exception as e:
             print(f"❌ Database connection failed: {e}")
             raise
-
-    def _init_sqlalchemy_engine(self):
-        """Initialize SQLAlchemy engine for pandas compatibility"""
-        try:
-            if self.database_url:
-                # Create SQLAlchemy engine from DATABASE_URL
-                self.sqlalchemy_engine = create_engine(self.database_url)
-                print("✅ SQLAlchemy engine initialized for ML pipeline")
-        except Exception as e:
-            print(f"⚠️ SQLAlchemy engine init failed: {e}")
-            self.sqlalchemy_engine = None
 
     def _create_tables(self):
         """Create necessary tables if they don't exist"""
@@ -177,34 +155,9 @@ class DatabaseManager:
             return None
 
     def get_recent_transactions(self, limit: int = 100) -> pd.DataFrame:
-        """FIXED: Get recent transactions with proper parameter handling"""
+        """EMERGENCY FIX: Use psycopg2 only"""
         try:
-            # Try SQLAlchemy first (better pandas support)
-            if self.sqlalchemy_engine:
-                try:
-                    # FIXED: Use SQLAlchemy-style query with proper parameter
-                    query = """
-                        SELECT timestamp, input_token, output_token, amount_in, amount_out,
-                               price_impact, price, volume, rsi, profitable, ml_prediction
-                        FROM transactions
-                        ORDER BY timestamp DESC
-                        LIMIT :limit
-                    """
-                    
-                    df = pd.read_sql_query(query, self.sqlalchemy_engine, params={'limit': limit})
-                    
-                    if len(df) > 0:
-                        df['timestamp'] = pd.to_datetime(df['timestamp'])
-                        print(f"✅ Retrieved {len(df)} recent transactions via SQLAlchemy")
-                    else:
-                        print("⚠️ No recent transactions found")
-                    return df
-                    
-                except Exception as e:
-                    print(f"⚠️ SQLAlchemy query failed: {e}")
-            
-            # FIXED: Fallback to psycopg2 with proper parameter style
-            query_psycopg2 = """
+            query = """
                 SELECT timestamp, input_token, output_token, amount_in, amount_out,
                        price_impact, price, volume, rsi, profitable, ml_prediction
                 FROM transactions
@@ -212,11 +165,11 @@ class DatabaseManager:
                 LIMIT %s;
             """
             
-            df = pd.read_sql_query(query_psycopg2, self.connection, params=(limit,))
+            df = pd.read_sql_query(query, self.connection, params=(limit,))
 
             if len(df) > 0:
                 df['timestamp'] = pd.to_datetime(df['timestamp'])
-                print(f"✅ Retrieved {len(df)} recent transactions via psycopg2")
+                print(f"✅ Retrieved {len(df)} recent transactions via psycopg2 ONLY")
             else:
                 print("⚠️ No recent transactions found")
 
@@ -227,44 +180,38 @@ class DatabaseManager:
             return pd.DataFrame()
 
     def get_all_transactions_for_ml(self) -> pd.DataFrame:
-        """FIXED: Get ALL transactions for ML with proper parameter handling"""
+        """EMERGENCY FIX: Use psycopg2 only with better data filtering"""
         try:
-            # Try SQLAlchemy engine first (better pandas support)
-            if self.sqlalchemy_engine:
-                try:
-                    query = """
-                        SELECT timestamp, price, volume, rsi, amount_in, amount_out,
-                               price_impact, profitable, input_token, output_token
-                        FROM transactions
-                        WHERE price IS NOT NULL AND price > 0 AND rsi IS NOT NULL
-                        ORDER BY timestamp ASC
-                    """
-                    
-                    df = pd.read_sql_query(query, self.sqlalchemy_engine)
-                    
-                    if len(df) > 0:
-                        df['timestamp'] = pd.to_datetime(df['timestamp'])
-                        print(f"✅ Retrieved {len(df)} ALL transactions via SQLAlchemy engine")
-                    else:
-                        print("⚠️ No transactions found for ML training")
-                    return df
-                except Exception as e:
-                    print(f"⚠️ SQLAlchemy ML query failed: {e}, falling back to psycopg2")
-            
-            # Fallback to original psycopg2 method
-            query_psycopg2 = """
+            query = """
                 SELECT timestamp, price, volume, rsi, amount_in, amount_out,
                        price_impact, profitable, input_token, output_token
                 FROM transactions
-                WHERE price IS NOT NULL AND price > 0 AND rsi IS NOT NULL
+                WHERE price IS NOT NULL 
+                  AND price > 0 
+                  AND rsi IS NOT NULL 
+                  AND rsi BETWEEN 1 AND 99
+                  AND volume IS NOT NULL
+                  AND volume > 0
                 ORDER BY timestamp ASC;
             """
             
-            df = pd.read_sql_query(query_psycopg2, self.connection)
+            df = pd.read_sql_query(query, self.connection)
             
             if len(df) > 0:
                 df['timestamp'] = pd.to_datetime(df['timestamp'])
-                print(f"✅ Retrieved {len(df)} ALL transactions via psycopg2 fallback")
+                
+                # ADDITIONAL DATA VALIDATION
+                initial_count = len(df)
+                
+                # Remove outliers and invalid data
+                df = df[df['price'] > 0.01]  # Remove very small prices
+                df = df[df['rsi'].between(1, 99)]  # Valid RSI range
+                df = df[df['amount_in'] > 0]
+                df = df[df['amount_out'] > 0]
+                
+                final_count = len(df)
+                
+                print(f"✅ Retrieved {final_count} clean transactions for ML (filtered from {initial_count})")
             else:
                 print("⚠️ No transactions found for ML training")
 
@@ -286,7 +233,7 @@ class DatabaseManager:
                 WHERE model_type = %s;
             """, (model_info.get('model_type', 'unknown'),))
 
-            # FIXED: Convert numpy values to native Python types
+            # Convert numpy values to native Python types
             accuracy = self._convert_numpy_values(model_info.get('accuracy', 0))
             r2_score = self._convert_numpy_values(model_info.get('r2_score', 0))
             mae = self._convert_numpy_values(model_info.get('mae', 0))
@@ -464,13 +411,10 @@ class DatabaseManager:
         if self.connection:
             self.connection.close()
             print("✅ Database connection closed")
-        if self.sqlalchemy_engine:
-            self.sqlalchemy_engine.dispose()
 
 
 # Global database manager instance
 _db_manager = None
-
 
 def get_db_manager():
     """Get global database manager instance"""
