@@ -1,13 +1,14 @@
-# database/db_manager.py - PostgreSQL Integration for DexBot (FIXED CRITICAL BUG)
+# database/db_manager.py - PostgreSQL Integration for DexBot (PRODUCTION FIXED)
 import os
 import psycopg2
-import psycopg2.extras  # DODANE: Potrzebne dla Json()
+import psycopg2.extras
 import pandas as pd
+import numpy as np  # ADDED: for numpy type conversion
 from datetime import datetime
 from typing import Dict, List, Optional
 import logging
 
-# DODANE: SQLAlchemy imports
+# SQLAlchemy imports
 try:
     import sqlalchemy
     from sqlalchemy import create_engine
@@ -117,6 +118,16 @@ class DatabaseManager:
             print(f"❌ Error creating tables: {e}")
             raise
 
+    def _convert_numpy_values(self, value):
+        """Convert numpy values to native Python types for PostgreSQL"""
+        if isinstance(value, (np.integer, np.floating)):
+            return float(value)
+        elif isinstance(value, np.ndarray):
+            return value.tolist()
+        elif isinstance(value, (np.bool_, bool)):
+            return bool(value)
+        return value
+
     def save_transaction(self, trade_data: Dict,
                          market_data: Optional[Dict] = None, ml_prediction: Optional[Dict] = None):
         """Save transaction to database"""
@@ -166,23 +177,21 @@ class DatabaseManager:
             return None
 
     def get_recent_transactions(self, limit: int = 100) -> pd.DataFrame:
-        """ENHANCED: Get recent transactions with SQLAlchemy support"""
+        """FIXED: Get recent transactions with proper parameter handling"""
         try:
-            query = """
-                SELECT timestamp, input_token, output_token, amount_in, amount_out,
-                       price_impact, price, volume, rsi, profitable, ml_prediction
-                FROM transactions
-                ORDER BY timestamp DESC
-                LIMIT %s;
-            """
-        
             # Try SQLAlchemy first (better pandas support)
             if self.sqlalchemy_engine:
                 try:
-                    # SQLAlchemy uses different parameter style
-                    sqlalchemy_query = query.replace('%s', ':limit')
-                    # 🔧 FIXED: Use query variable instead of sqlalchemy_query
-                    df = pd.read_sql_query(sqlalchemy_query, self.sqlalchemy_engine, params={'limit': limit})
+                    # FIXED: Use SQLAlchemy-style query with proper parameter
+                    query = """
+                        SELECT timestamp, input_token, output_token, amount_in, amount_out,
+                               price_impact, price, volume, rsi, profitable, ml_prediction
+                        FROM transactions
+                        ORDER BY timestamp DESC
+                        LIMIT :limit
+                    """
+                    
+                    df = pd.read_sql_query(query, self.sqlalchemy_engine, params={'limit': limit})
                     
                     if len(df) > 0:
                         df['timestamp'] = pd.to_datetime(df['timestamp'])
@@ -194,8 +203,16 @@ class DatabaseManager:
                 except Exception as e:
                     print(f"⚠️ SQLAlchemy query failed: {e}")
             
-            # Fallback to psycopg2
-            df = pd.read_sql_query(query, self.connection, params=(limit,))
+            # FIXED: Fallback to psycopg2 with proper parameter style
+            query_psycopg2 = """
+                SELECT timestamp, input_token, output_token, amount_in, amount_out,
+                       price_impact, price, volume, rsi, profitable, ml_prediction
+                FROM transactions
+                ORDER BY timestamp DESC
+                LIMIT %s;
+            """
+            
+            df = pd.read_sql_query(query_psycopg2, self.connection, params=(limit,))
 
             if len(df) > 0:
                 df['timestamp'] = pd.to_datetime(df['timestamp'])
@@ -210,19 +227,19 @@ class DatabaseManager:
             return pd.DataFrame()
 
     def get_all_transactions_for_ml(self) -> pd.DataFrame:
-        """ENHANCED: Get ALL transactions for ML with SQLAlchemy support"""
+        """FIXED: Get ALL transactions for ML with proper parameter handling"""
         try:
-            query = """
-                SELECT timestamp, price, volume, rsi, amount_in, amount_out,
-                       price_impact, profitable, input_token, output_token
-                FROM transactions
-                WHERE price IS NOT NULL AND price > 0 AND rsi IS NOT NULL
-                ORDER BY timestamp ASC;
-            """
-            
             # Try SQLAlchemy engine first (better pandas support)
             if self.sqlalchemy_engine:
                 try:
+                    query = """
+                        SELECT timestamp, price, volume, rsi, amount_in, amount_out,
+                               price_impact, profitable, input_token, output_token
+                        FROM transactions
+                        WHERE price IS NOT NULL AND price > 0 AND rsi IS NOT NULL
+                        ORDER BY timestamp ASC
+                    """
+                    
                     df = pd.read_sql_query(query, self.sqlalchemy_engine)
                     
                     if len(df) > 0:
@@ -235,7 +252,15 @@ class DatabaseManager:
                     print(f"⚠️ SQLAlchemy ML query failed: {e}, falling back to psycopg2")
             
             # Fallback to original psycopg2 method
-            df = pd.read_sql_query(query, self.connection)
+            query_psycopg2 = """
+                SELECT timestamp, price, volume, rsi, amount_in, amount_out,
+                       price_impact, profitable, input_token, output_token
+                FROM transactions
+                WHERE price IS NOT NULL AND price > 0 AND rsi IS NOT NULL
+                ORDER BY timestamp ASC;
+            """
+            
+            df = pd.read_sql_query(query_psycopg2, self.connection)
             
             if len(df) > 0:
                 df['timestamp'] = pd.to_datetime(df['timestamp'])
@@ -250,7 +275,7 @@ class DatabaseManager:
             return pd.DataFrame()
 
     def save_ml_model_info(self, model_info: Dict):
-        """Save ML model performance info"""
+        """FIXED: Save ML model performance info with numpy value conversion"""
         try:
             cursor = self.connection.cursor()
 
@@ -260,6 +285,18 @@ class DatabaseManager:
                 SET is_active = FALSE
                 WHERE model_type = %s;
             """, (model_info.get('model_type', 'unknown'),))
+
+            # FIXED: Convert numpy values to native Python types
+            accuracy = self._convert_numpy_values(model_info.get('accuracy', 0))
+            r2_score = self._convert_numpy_values(model_info.get('r2_score', 0))
+            mae = self._convert_numpy_values(model_info.get('mae', 0))
+            training_samples = int(model_info.get('training_samples', 0))
+
+            # Convert metrics dict values
+            metrics = model_info.get('metrics', {})
+            converted_metrics = {}
+            for key, value in metrics.items():
+                converted_metrics[key] = self._convert_numpy_values(value)
 
             # Insert new model info
             cursor.execute("""
@@ -271,11 +308,11 @@ class DatabaseManager:
             """, (
                 model_info.get('model_name', 'Unknown'),
                 model_info.get('model_type', 'unknown'),
-                psycopg2.extras.Json(model_info.get('metrics', {})),
-                model_info.get('training_samples', 0),
-                model_info.get('accuracy', 0),
-                model_info.get('r2_score', 0),
-                model_info.get('mae', 0),
+                psycopg2.extras.Json(converted_metrics),
+                training_samples,
+                accuracy,
+                r2_score,
+                mae,
                 model_info.get('model_file_path', ''),
                 True,  # is_active
                 datetime.utcnow()
