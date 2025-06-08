@@ -1,4 +1,4 @@
-# run_worker_FINAL.py - COMPLETE FIXED VERSION FOR RAILWAY
+# run_worker.py - COMPLETE ENHANCED DIRECTIONAL TRADING BOT
 import os
 import sys
 import time
@@ -9,7 +9,6 @@ import threading
 import random
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Any
-from flask import Flask, jsonify
 
 # Wyłącz git checks
 os.environ['GIT_PYTHON_REFRESH'] = 'quiet'
@@ -23,11 +22,7 @@ try:
     print("✅ Core modules loaded")
 except ImportError as e:
     print(f"❌ Core import error: {e}")
-    # Create fallback settings
-    settings = {
-        'trades_per_cycle': 30,
-        'cycle_delay_seconds': 45
-    }
+    sys.exit(1)
 
 # Enhanced Multi-asset imports
 try:
@@ -49,15 +44,15 @@ except ImportError as e:
         print(f"⚠️ No multi-asset modules available: {e2}")
         MULTI_ASSET_AVAILABLE = False
 
-# Enhanced ML imports - FIXED
+# Enhanced ML imports
 try:
-    from ml.price_predictor_FINAL import DirectionalMLTradingIntegration
+    from price_predictor_COMPLETE import DirectionalMLTradingIntegration
     ML_AVAILABLE = True
     print("🤖 Enhanced directional ML modules available")
 except ImportError as e:
     print(f"⚠️ Enhanced ML modules not available: {e}")
     try:
-        from ml.price_predictor import MLTradingIntegration, DirectionalMLTradingIntegration
+        from ml.price_predictor import MLTradingIntegration
         ML_AVAILABLE = True
         print("✅ Basic ML modules available")
     except ImportError as e2:
@@ -77,138 +72,26 @@ except ImportError as e:
 STATE_FILE = "data/state.json"
 MEMORY_FILE = "data/memory.csv"
 
-# Flask app for health checks
-app = Flask(__name__)
-
-@app.route('/health')
-def health_check():
-    """Health check endpoint for Railway"""
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.now().isoformat(),
-        'service': 'enhanced-directional-trading-bot'
-    })
-
-@app.route('/status')
-def bot_status():
-    """Bot status endpoint"""
-    global bot_instance
-    if bot_instance:
-        return jsonify({
-            'status': 'running',
-            'cycles_completed': bot_instance.state.get('count', 0),
-            'ml_available': bot_instance.ml_integration is not None,
-            'last_update': datetime.now().isoformat()
-        })
-    return jsonify({'status': 'not_running'})
-
-# Global bot instance for status tracking
-bot_instance = None
-
-
-class FallbackMarketData:
-    """FIXED: Fallback market data service"""
-    
-    def __init__(self):
-        self.data_cache = {}
-    
-    def get_market_data(self, asset: str) -> Dict[str, Any]:
-        """Get market data with fallback"""
-        # Generate realistic market data
-        base_price = {'SOL': 150.0, 'ETH': 3500.0, 'BTC': 65000.0}.get(asset, 100.0)
-        
-        # Add some randomness
-        price_change = random.uniform(-0.05, 0.05)  # ±5%
-        current_price = base_price * (1 + price_change)
-        
-        return {
-            'price': current_price,
-            'rsi': random.uniform(20, 80),
-            'volume': random.uniform(1000, 5000),
-            'price_change_24h': price_change * 100,
-            'volatility': random.uniform(0.01, 0.05),
-            'timestamp': datetime.now().isoformat()
-        }
-
-
-class FallbackTradeExecutor:
-    """FIXED: Fallback trade executor"""
-    
-    def __init__(self):
-        self.db_manager = None
-    
-    def execute_trade(self, asset: str, amount_usd: float) -> Dict[str, Any]:
-        """Execute trade with simulation"""
-        success = random.choice([True, False], p=[0.7, 0.3])  # 70% success rate
-        
-        return {
-            'success': success,
-            'profitable': random.choice([True, False], p=[0.6, 0.4]) if success else False,
-            'amount_in': amount_usd,
-            'amount_out': amount_usd * random.uniform(0.98, 1.02) if success else 0,
-            'price_impact': random.uniform(0, 0.01),
-            'pnl': random.uniform(-0.02, 0.03) if success else -amount_usd * 0.01,
-            'input_token': 'USDC',
-            'output_token': asset
-        }
-    
-    def execute_directional_trade(self, asset: str, action: str, amount_usd: float, 
-                                market_data: Dict, prediction: Dict) -> Dict[str, Any]:
-        """Execute directional trade with simulation"""
-        return self.execute_trade(asset, amount_usd)
-    
-    def set_ml_integration(self, ml_integration):
-        """Set ML integration"""
-        pass
-
-
-class FallbackTradingSignals:
-    """FIXED: Fallback trading signals"""
-    
-    def __init__(self):
-        pass
-
-
-def get_trade_executor():
-    """FIXED: Get trade executor with fallback"""
-    try:
-        from core.trade_executor import get_trade_executor as original_get_trade_executor
-        return original_get_trade_executor()
-    except:
-        return FallbackTradeExecutor()
-
-
-def create_market_data_service(callback=None):
-    """FIXED: Create market data service with fallback"""
-    try:
-        from core.market_data import create_market_data_service as original_create
-        if callback:
-            return original_create(callback)
-        else:
-            return original_create(lambda x: None)
-    except:
-        return FallbackMarketData()
-
-
-class TradingSignals:
-    """FIXED: Trading signals with fallback"""
-    
-    def __init__(self):
-        pass
-
 
 class EnhancedDirectionalTradingBot:
-    """ULTRA-ADVANCED DIRECTIONAL TRADING BOT - RAILWAY OPTIMIZED"""
+    """ULTRA-ADVANCED DIRECTIONAL TRADING BOT - ZARABIA NA WZROSTACH I SPADKACH!"""
     
     def __init__(self):
         print("🚀 INITIALIZING ENHANCED DIRECTIONAL TRADING BOT...")
         print("🎯 NOWA FUNKCJONALNOŚĆ: Zarabianie na spadkach (SHORT SELLING)!")
-        print("☁️ RAILWAY DEPLOYMENT MODE")
         
-        # Core components with fallbacks
+        # Core components
         self.trade_executor = get_trade_executor()
         self.trading_signals = TradingSignals()
         self.state = {"count": 0, "session_start": datetime.now().isoformat()}
+        
+        # Ensure we're using the enhanced executor
+        if not isinstance(self.trade_executor, EnhancedDirectionalTradeExecutor):
+            print("🔄 Upgrading to Enhanced Directional Trade Executor...")
+            try:
+                self.trade_executor = EnhancedDirectionalTradeExecutor()
+            except:
+                print("⚠️ Using basic trade executor")
         
         # Market data services
         self.market_service = None
@@ -227,8 +110,6 @@ class EnhancedDirectionalTradingBot:
             'BTC': 0.25    # 25% allocation
         }
         self.trade_counts = {'SOL': 0, 'ETH': 0, 'BTC': 0}
-        
-        # FIXED: Proper directional performance tracking
         self.directional_performance = {
             'long_trades': 0, 'short_trades': 0, 'hold_actions': 0,
             'long_wins': 0, 'short_wins': 0,
@@ -258,8 +139,6 @@ class EnhancedDirectionalTradingBot:
         # Performance tracking
         self.cycle_performance = []
         self.recent_win_rate = 0.5
-        
-        # FIXED: Proper session stats initialization
         self.session_stats = {
             'cycles_completed': 0,
             'total_trades_executed': 0,
@@ -310,7 +189,7 @@ class EnhancedDirectionalTradingBot:
                 
             except Exception as e:
                 print(f"❌ ML initialization failed: {e}")
-                self.ml_integration = self._create_fallback_ml()
+                self.ml_integration = None
         
         # Initialize Enhanced Multi-Asset Signals
         if MULTI_ASSET_AVAILABLE:
@@ -326,14 +205,13 @@ class EnhancedDirectionalTradingBot:
                 print(f"❌ Multi-asset signals failed: {e}")
                 self.multi_asset_signals = None
         
-        # Initialize market data service - FIXED
+        # Initialize market data service
         try:
             self.market_service = create_market_data_service()
             print("✅ Market data service initialized")
         except Exception as e:
             print(f"❌ Market data service failed: {e}")
-            self.market_service = FallbackMarketData()
-            print("✅ Fallback market data service initialized")
+            self.market_service = None
         
         # Initialize auto-retrainer
         if AUTO_RETRAIN_AVAILABLE and self.ml_integration:
@@ -349,19 +227,19 @@ class EnhancedDirectionalTradingBot:
         # Initialize data directories
         os.makedirs("data", exist_ok=True)
         os.makedirs("models", exist_ok=True)
-        os.makedirs("logs", exist_ok=True)
     
     def _create_fallback_ml(self):
         """Create a simple fallback ML integration"""
         class FallbackML:
             def __init__(self):
-                self.is_trained = True  # Always ready
+                self.is_trained = False
             
             def should_retrain(self):
-                return False
+                return not self.is_trained
             
             def train_directional_models(self, force_retrain=False):
                 print("🔄 Fallback ML training (rule-based)")
+                self.is_trained = True
                 return True
             
             def predict_directional_action(self, current_data):
@@ -389,7 +267,7 @@ class EnhancedDirectionalTradingBot:
             
             def get_model_status(self):
                 return {
-                    'is_trained': True,
+                    'is_trained': self.is_trained,
                     'models_count': 1,
                     'model_names': ['fallback'],
                     'should_retrain': False
@@ -401,7 +279,6 @@ class EnhancedDirectionalTradingBot:
         """Print initialization summary"""
         print("\n🎯 ENHANCED DIRECTIONAL TRADING BOT INITIALIZATION SUMMARY")
         print("=" * 60)
-        print(f"☁️ Railway Mode: ✅ Enabled")
         print(f"🤖 ML Integration: {'✅ Available' if self.ml_integration else '❌ Not Available'}")
         print(f"📊 Multi-Asset: {'✅ Available' if MULTI_ASSET_AVAILABLE else '❌ Not Available'}")
         print(f"🔄 Auto-Retrainer: {'✅ Available' if self.auto_retrainer else '❌ Not Available'}")
@@ -427,7 +304,7 @@ class EnhancedDirectionalTradingBot:
                     return
             
             # If no models exist or loading failed, train new ones
-            if hasattr(self.ml_integration, 'should_retrain') and self.ml_integration.should_retrain():
+            if self.ml_integration.should_retrain():
                 print("🤖 Starting initial ML training...")
                 self.training_in_progress = True
                 
@@ -468,12 +345,12 @@ class EnhancedDirectionalTradingBot:
             print(f"⚠️ Error saving state: {e}")
     
     def _get_current_market_data(self, asset: str = None) -> Dict[str, Any]:
-        """FIXED: Get current market data for specified asset"""
+        """Get current market data for specified asset"""
         if asset is None:
             asset = self.current_asset
         
         try:
-            if self.market_service and hasattr(self.market_service, 'get_market_data'):
+            if self.market_service:
                 data = self.market_service.get_market_data(asset)
                 if data:
                     self.latest_market_data[asset] = data
@@ -484,15 +361,25 @@ class EnhancedDirectionalTradingBot:
                 return self.latest_market_data[asset]
             
             # Ultimate fallback - generate basic data
-            fallback_service = FallbackMarketData()
-            data = fallback_service.get_market_data(asset)
-            self.latest_market_data[asset] = data
-            return data
+            return {
+                'price': 100.0,
+                'rsi': 50.0,
+                'volume': 1000.0,
+                'price_change_24h': 0.0,
+                'volatility': 0.02,
+                'timestamp': datetime.now().isoformat()
+            }
             
         except Exception as e:
             print(f"⚠️ Error getting market data for {asset}: {e}")
-            fallback_service = FallbackMarketData()
-            return fallback_service.get_market_data(asset)
+            return {
+                'price': 100.0,
+                'rsi': 50.0,
+                'volume': 1000.0,
+                'price_change_24h': 0.0,
+                'volatility': 0.02,
+                'timestamp': datetime.now().isoformat()
+            }
     
     def _get_directional_prediction(self, market_data: Dict[str, Any]) -> Dict[str, Any]:
         """Get directional prediction from ML or fallback"""
@@ -583,17 +470,14 @@ class EnhancedDirectionalTradingBot:
                 action = 'HOLD'
                 direction = 'hold'
             
-            # FIXED: Update directional performance tracking with proper key names
-            if direction in ['long', 'short']:
-                self.directional_performance[f'{direction}_trades'] += 1
-                self.session_stats[f'{direction}_trades'] += 1
-            else:
-                self.directional_performance['hold_actions'] += 1
-                self.session_stats['hold_actions'] += 1
+            # Update directional performance tracking
+            self.directional_performance[f'{direction}_trades'] += 1
+            self.session_stats[f'{direction}_trades'] += 1
             
             # Execute the trade
             if action == 'HOLD':
                 print(f"⏸️ HOLDING position for {asset}")
+                self.directional_performance['hold_actions'] += 1
                 return True
             
             # Calculate trade amount based on portfolio allocation
@@ -622,13 +506,11 @@ class EnhancedDirectionalTradingBot:
                 
                 # Update performance tracking
                 if result.get('profitable', False):
-                    if direction in ['long', 'short']:
-                        self.directional_performance[f'{direction}_wins'] += 1
+                    self.directional_performance[f'{direction}_wins'] += 1
                     self.session_stats['profitable_trades'] += 1
                 
                 pnl = result.get('pnl', 0.0)
-                if direction in ['long', 'short']:
-                    self.directional_performance[f'{direction}_pnl'] += pnl
+                self.directional_performance[f'{direction}_pnl'] += pnl
                 
                 # Save trade to memory
                 self._save_trade_to_memory(asset, action, result, market_data, prediction)
@@ -719,11 +601,82 @@ class EnhancedDirectionalTradingBot:
             print(f"⚠️ Asset selection error: {e}")
             return self.current_asset
     
+    def _update_adaptive_parameters(self):
+        """Update adaptive parameters based on performance"""
+        try:
+            # Calculate recent win rate
+            if len(self.cycle_performance) > 0:
+                recent_cycles = self.cycle_performance[-5:]  # Last 5 cycles
+                total_trades = sum([cycle.get('trades', 0) for cycle in recent_cycles])
+                profitable_trades = sum([cycle.get('profitable', 0) for cycle in recent_cycles])
+                
+                if total_trades > 0:
+                    self.recent_win_rate = profitable_trades / total_trades
+                
+                # Adjust cycle size based on performance
+                if self.recent_win_rate > 0.6:
+                    # Good performance - increase cycle size
+                    self.adaptive_cycle_size = min(self.adaptive_cycle_size + 2, 50)
+                elif self.recent_win_rate < 0.4:
+                    # Poor performance - decrease cycle size
+                    self.adaptive_cycle_size = max(self.adaptive_cycle_size - 2, 10)
+                
+                # Adjust delay based on volatility
+                avg_volatility = sum([cycle.get('volatility', 0.02) for cycle in recent_cycles]) / len(recent_cycles)
+                if avg_volatility > 0.05:
+                    # High volatility - increase delay
+                    self.adaptive_delay = min(self.adaptive_delay + 5, 120)
+                elif avg_volatility < 0.01:
+                    # Low volatility - decrease delay
+                    self.adaptive_delay = max(self.adaptive_delay - 5, 30)
+            
+            print(f"📊 Adaptive parameters updated:")
+            print(f"   Win rate: {self.recent_win_rate:.2f}")
+            print(f"   Cycle size: {self.adaptive_cycle_size}")
+            print(f"   Delay: {self.adaptive_delay}s")
+            
+        except Exception as e:
+            print(f"⚠️ Adaptive parameter update error: {e}")
+    
+    def _print_cycle_summary(self, cycle_stats: Dict):
+        """Print cycle summary"""
+        print(f"\n🎯 CYCLE {self.state['count']} SUMMARY")
+        print("=" * 50)
+        print(f"📊 Trades Executed: {cycle_stats.get('trades_executed', 0)}")
+        print(f"💰 Profitable Trades: {cycle_stats.get('profitable_trades', 0)}")
+        print(f"📈 Long Trades: {cycle_stats.get('long_trades', 0)}")
+        print(f"📉 Short Trades: {cycle_stats.get('short_trades', 0)}")
+        print(f"⏸️ Hold Actions: {cycle_stats.get('hold_actions', 0)}")
+        print(f"🎯 Current Asset: {self.current_asset}")
+        print(f"🤖 ML Predictions: {self.ml_prediction_count}")
+        print(f"⚡ Win Rate: {self.recent_win_rate:.2%}")
+        print("=" * 50)
+        print()
+    
+    def _print_session_summary(self):
+        """Print session summary"""
+        print(f"\n🎯 SESSION SUMMARY")
+        print("=" * 60)
+        print(f"🔄 Cycles Completed: {self.session_stats['cycles_completed']}")
+        print(f"📊 Total Trades: {self.session_stats['total_trades_executed']}")
+        print(f"💰 Profitable Trades: {self.session_stats['profitable_trades']}")
+        print(f"📈 Long Trades: {self.session_stats['long_trades']} (Wins: {self.session_stats['long_wins']})")
+        print(f"📉 Short Trades: {self.session_stats['short_trades']} (Wins: {self.session_stats['short_wins']})")
+        print(f"⏸️ Hold Actions: {self.session_stats['hold_actions']}")
+        print(f"🔄 Asset Switches: {self.session_stats['asset_switches']}")
+        print(f"🎯 Directional Switches: {self.session_stats['directional_switches']}")
+        
+        if self.session_stats['total_trades_executed'] > 0:
+            win_rate = self.session_stats['profitable_trades'] / self.session_stats['total_trades_executed']
+            print(f"⚡ Overall Win Rate: {win_rate:.2%}")
+        
+        print(f"🤖 ML Status: {self.ml_integration.get_model_status() if self.ml_integration else 'Not Available'}")
+        print("=" * 60)
+        print()
+    
     def run_trading_cycle(self):
         """Run a single enhanced directional trading cycle"""
         cycle_start_time = datetime.now()
-        
-        # FIXED: Initialize cycle stats with proper keys
         cycle_stats = {
             'trades_executed': 0,
             'profitable_trades': 0,
@@ -738,6 +691,8 @@ class EnhancedDirectionalTradingBot:
         
         try:
             for trade_num in range(self.adaptive_cycle_size):
+                trade_start_time = datetime.now()
+                
                 # Select asset for this trade
                 current_asset = self._select_next_asset()
                 
@@ -756,10 +711,7 @@ class EnhancedDirectionalTradingBot:
                     
                     # Update cycle stats based on prediction
                     direction = prediction.get('direction', 'hold')
-                    if direction in ['long', 'short']:
-                        cycle_stats[f'{direction}_trades'] += 1
-                    else:
-                        cycle_stats['hold_actions'] += 1
+                    cycle_stats[f'{direction}_trades'] += 1
                     
                     # Track volatility
                     volatility = market_data.get('volatility', 0.02)
@@ -777,8 +729,36 @@ class EnhancedDirectionalTradingBot:
             self.session_stats['cycles_completed'] += 1
             self.session_stats['total_trades_executed'] += cycle_stats['trades_executed']
             
+            # Store cycle performance
+            cycle_duration = (datetime.now() - cycle_start_time).total_seconds()
+            cycle_performance = {
+                'cycle': self.state['count'],
+                'trades': cycle_stats['trades_executed'],
+                'profitable': cycle_stats['profitable_trades'],
+                'duration': cycle_duration,
+                'volatility': cycle_stats['volatility'],
+                'timestamp': datetime.now().isoformat()
+            }
+            self.cycle_performance.append(cycle_performance)
+            
+            # Keep only last 20 cycles
+            if len(self.cycle_performance) > 20:
+                self.cycle_performance = self.cycle_performance[-20:]
+            
+            # Update adaptive parameters
+            self._update_adaptive_parameters()
+            
+            # Print cycle summary
+            self._print_cycle_summary(cycle_stats)
+            
             # Save state
             self._save_state()
+            
+            # Check for ML retraining
+            if self.ml_integration and not self.training_in_progress:
+                if self.ml_integration.should_retrain():
+                    print("🤖 Starting ML model retraining...")
+                    threading.Thread(target=self._retrain_ml_models, daemon=True).start()
             
             return True
             
@@ -789,11 +769,29 @@ class EnhancedDirectionalTradingBot:
             print(f"❌ Trading cycle error: {e}")
             return False
     
+    def _retrain_ml_models(self):
+        """Retrain ML models in background"""
+        try:
+            self.training_in_progress = True
+            print("🤖 Background ML retraining started...")
+            
+            success = self.ml_integration.train_directional_models(force_retrain=True)
+            
+            if success:
+                print("✅ Background ML retraining completed successfully")
+                self.last_ml_training = datetime.now()
+            else:
+                print("⚠️ Background ML retraining failed")
+            
+        except Exception as e:
+            print(f"❌ Background ML retraining error: {e}")
+        finally:
+            self.training_in_progress = False
+    
     def run(self):
         """Main bot execution loop"""
         print("🚀 ENHANCED DIRECTIONAL TRADING BOT STARTING...")
         print("🎯 READY TO PROFIT FROM BOTH RISES AND FALLS!")
-        print("☁️ RAILWAY DEPLOYMENT MODE")
         
         try:
             while True:
@@ -805,39 +803,32 @@ class EnhancedDirectionalTradingBot:
                     time.sleep(60)
                     continue
                 
+                # Print session summary every 10 cycles
+                if self.state['count'] % 10 == 0:
+                    self._print_session_summary()
+                
                 # Brief pause between cycles
                 print(f"⏰ Waiting {self.adaptive_delay}s before next cycle...")
                 time.sleep(self.adaptive_delay)
                 
         except KeyboardInterrupt:
             print("\n🛑 ENHANCED DIRECTIONAL TRADING BOT STOPPED BY USER")
+            self._print_session_summary()
         except Exception as e:
             print(f"❌ FATAL ERROR: {e}")
+            self._print_session_summary()
         finally:
             print("👋 Enhanced Directional Trading Bot shutdown complete")
 
 
-def run_flask_server():
-    """Run Flask server for health checks"""
-    port = int(os.getenv('PORT', 8080))
-    app.run(host='0.0.0.0', port=port, debug=False)
-
-
 def main():
     """Main entry point"""
-    print("🎯 ENHANCED DIRECTIONAL TRADING BOT - RAILWAY DEPLOYMENT")
-    
-    global bot_instance
+    print("🎯 ENHANCED DIRECTIONAL TRADING BOT - MAIN ENTRY POINT")
     
     try:
-        # Start Flask server in background for health checks
-        flask_thread = threading.Thread(target=run_flask_server, daemon=True)
-        flask_thread.start()
-        print(f"✅ Health check server started on port {os.getenv('PORT', 8080)}")
-        
         # Create and run the bot
-        bot_instance = EnhancedDirectionalTradingBot()
-        bot_instance.run()
+        bot = EnhancedDirectionalTradingBot()
+        bot.run()
         
     except KeyboardInterrupt:
         print("\n🛑 Bot stopped by user")

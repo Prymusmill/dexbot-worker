@@ -1,38 +1,43 @@
-# Existing services + Persistent Volumes
-[[services]]
-name = "worker"
-source = "."
-build.buildCommand = "pip install -r requirements.txt"
-build.startCommand = "python run_worker.py"
+# railway.toml - Konfiguracja dla Railway
 
-# DODANE: Persistent volumes for worker
-[services.volumes]
-data-volume = "/app/data"
-ml-volume = "/app/ml/models"
+[build]
+builder = "dockerfile"
+buildCommand = "docker build -t dexbot-worker ."
 
-[[services]]
-name = "api"
-source = "."
-build.buildCommand = "pip install -r requirements.txt"
-build.startCommand = "python serve.py"
+[deploy]
+startCommand = "python run_worker.py"
+healthcheckPath = "/"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5
 
-# DODANE: Volumes for API (shared access to data)
-[services.volumes]
-data-volume = "/app/data"
-ml-volume = "/app/ml/models"
+# Konfiguracja zasobów dla run_worker
+[deploy.worker]
+numReplicas = 1
+sleepApplication = false
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
+healthcheckPath = "/"
+healthcheckTimeout = 300
 
-[[services]]
-name = "dashboard"
-source = "."
-build.buildCommand = "pip install -r requirements.txt"
-build.startCommand = "streamlit run dashboard.py --server.port=$PORT --server.address=0.0.0.0"
+# Konfiguracja zasobów dla dashboard
+[deploy.dashboard]
+numReplicas = 1
+sleepApplication = false
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5
+healthcheckPath = "/"
+healthcheckTimeout = 300
 
-# DODANE: Volumes for dashboard (read access to data)
-[services.volumes]
-data-volume = "/app/data"
-ml-volume = "/app/ml/models"
+# Konfiguracja zmiennych środowiskowych
+[variables]
+ML_MIN_SAMPLES = "100"
+ML_MIN_SAMPLES_PER_CLASS = "50"
+ML_RETRAIN_HOURS = "4.0"
+TRADES_PER_CYCLE = "30"
+CYCLE_DELAY_SECONDS = "45"
+DIRECTIONAL_CONFIDENCE_THRESHOLD = "0.6"
+ENABLE_DIRECTIONAL_TRADING = "true"
+ENABLE_AUTO_RETRAINING = "true"
+LOG_LEVEL = "INFO"
 
-# DODANE: Environment variables
-[environment]
-PYTHONUNBUFFERED = "1"
-TF_CPP_MIN_LOG_LEVEL = "2"
