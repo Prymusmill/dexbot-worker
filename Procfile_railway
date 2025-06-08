@@ -1,5 +1,0 @@
-# Railway Procfile for Enhanced Directional Trading Bot
-web: python run_worker_FINAL.py
-dashboard: python dashboard_FINAL.py
-worker: python run_worker_FINAL.py
-

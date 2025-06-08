@@ -1,5 +1,5 @@
-# Enhanced Directional Trading Bot - Railway Deployment
-# Optimized for Railway.app cloud deployment
+# FIXED Enhanced Directional Trading Bot - Railway Deployment
+# Compatible with Python 3.10+ and Railway.app cloud deployment
 
 # Core dependencies
 pandas==2.1.4
@@ -35,11 +35,10 @@ psutil==5.9.6
 python-dateutil==2.8.2
 pytz==2023.3
 
-# Security
-cryptography==41.0.8
+# FIXED: Security (compatible with Python 3.10+)
+cryptography>=41.0.0,<44.0.0
 
-# Development tools (optional)
-pytest==7.4.3
-black==23.11.0
-flake8==6.1.0
-
+# Development tools (optional - removed to reduce build time)
+# pytest==7.4.3
+# black==23.11.0
+# flake8==6.1.0
