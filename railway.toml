@@ -16,6 +16,9 @@ sleepApplication = false
 
 # FIXED: Konfiguracja zmiennych środowiskowych (kompatybilne z Python 3.10+)
 [variables]
+# 🎯 DATABASE CONFIGURATION
+DATABASE_URL = "postgresql://postgres:jueGoZDqcwpccYjLmrMaBabOHLqgHWXu@postgres.railway.internal:5432/railway"
+
 # ML Configuration
 ML_MIN_SAMPLES = "100"
 ML_MIN_SAMPLES_PER_CLASS = "50"
@@ -40,3 +43,8 @@ PYTHONPATH = "/app"
 
 # Railway specific
 PORT = "8080"
+
+# Database specific
+DB_CONNECTION_TIMEOUT = "30"
+DB_QUERY_TIMEOUT = "15"
+DB_RETRY_ATTEMPTS = "3"
