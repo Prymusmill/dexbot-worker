@@ -1,43 +1,42 @@
-# railway.toml - Konfiguracja dla Railway
+# FIXED railway.toml - Konfiguracja dla Railway z Python 3.10+
 
 [build]
 builder = "dockerfile"
-buildCommand = "docker build -t dexbot-worker ."
 
 [deploy]
 startCommand = "python run_worker.py"
-healthcheckPath = "/"
+healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 5
+restartPolicyMaxRetries = 3
 
-# Konfiguracja zasobów dla run_worker
-[deploy.worker]
+# FIXED: Konfiguracja zasobów
 numReplicas = 1
 sleepApplication = false
-restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 10
-healthcheckPath = "/"
-healthcheckTimeout = 300
 
-# Konfiguracja zasobów dla dashboard
-[deploy.dashboard]
-numReplicas = 1
-sleepApplication = false
-restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 5
-healthcheckPath = "/"
-healthcheckTimeout = 300
-
-# Konfiguracja zmiennych środowiskowych
+# FIXED: Konfiguracja zmiennych środowiskowych (kompatybilne z Python 3.10+)
 [variables]
+# ML Configuration
 ML_MIN_SAMPLES = "100"
 ML_MIN_SAMPLES_PER_CLASS = "50"
 ML_RETRAIN_HOURS = "4.0"
-TRADES_PER_CYCLE = "30"
-CYCLE_DELAY_SECONDS = "45"
+
+# Trading Configuration  
+TRADES_PER_CYCLE = "25"
+CYCLE_DELAY_SECONDS = "60"
+TRADE_AMOUNT_USD = "0.02"
+
+# Directional Trading
 DIRECTIONAL_CONFIDENCE_THRESHOLD = "0.6"
 ENABLE_DIRECTIONAL_TRADING = "true"
+LONG_BIAS = "0.4"
+SHORT_BIAS = "0.4"
+HOLD_BIAS = "0.2"
+
+# System Configuration
 ENABLE_AUTO_RETRAINING = "true"
 LOG_LEVEL = "INFO"
+PYTHONPATH = "/app"
 
+# Railway specific
+PORT = "8080"
